@@ -179,11 +179,31 @@ const q=v=>Math.round(v*S)/S;
 let seed=12345;function rnd(){seed=(seed*16807)%2147483647;return(seed-1)/2147483646}
 
 // ---------- map ----------
-const T=16,MW=48,MH=32;
-const GRASS=0,PATH=1,WATER=2,TREE=3,HOUSE=4,FLOWER=5,SAND=6;
-const map=new Uint8Array(MW*MH);
+// Several maps; MW, MH, map, mapCv always point at the current one (see useMap / switchMap).
+const T=16;
+const GRASS=0,PATH=1,WATER=2,TREE=3,HOUSE=4,FLOWER=5,SAND=6,MOSS=7,FERN=8,MUSH=9,STUMP=10,BRIDGE=11,SIGN=12;
+let MW=48,MH=32,map=new Uint8Array(MW*MH),mapCv=null,curMap='meadow';
 const at=(x,y)=>(x<0||y<0||x>=MW||y>=MH)?TREE:map[y*MW+x];
 const set=(x,y,v)=>{if(x>=0&&y>=0&&x<MW&&y<MH)map[y*MW+x]=v};
+const dE=(x,y,[cx,cy,rx,ry])=>((x-cx)/rx)**2+((y-cy)/ry)**2;
+const LAIR=[32,21,5,4];
+const MAPS={
+  meadow:{id:'meadow',name:'Луг у Тёплого Ручья',w:48,h:32,enemies:[],items:[],spawn:[10,10],
+    exits:[{x:47,y:10,to:'forest',tx:2,ty:13,dir:'right'},{x:47,y:11,to:'forest',tx:2,ty:14,dir:'right'}],
+    signs:[{x:44,y:9,s:'Шепчущий лес →',left:false}]},
+  forest:{id:'forest',name:'Шепчущий лес',w:40,h:28,enemies:[],items:[],spawn:[2,13],
+    exits:[{x:0,y:13,to:'meadow',tx:45,ty:10,dir:'left'},{x:0,y:14,to:'meadow',tx:45,ty:11,dir:'left'}],
+    signs:[{x:2,y:12,s:'← Тёплый Ручей',left:true}],
+    rings:[{x:8,y:6,used:false},{x:25,y:5,used:false}],
+    shrooms:[[30,19],[35,19],[31,23],[35,23]].map(([x,y])=>({x,y,alive:true}))},
+};
+for(const id in MAPS){const M=MAPS[id];M.tiles=new Uint8Array(M.w*M.h)}
+function useMap(id){const M=MAPS[id];curMap=id;MW=M.w;MH=M.h;map=M.tiles;mapCv=M.cv}
+const tileOf=(id,x,y)=>{const M=MAPS[id];return(x<0||y<0||x>=M.w||y>=M.h)?TREE:M.tiles[y*M.w+x]};
+const exitAt=(x,y)=>MAPS[curMap].exits.find(e=>e.x===x&&e.y===y);
+const signAt=(x,y)=>at(x,y)===SIGN?MAPS[curMap].signs.find(e=>e.x===x&&e.y===y):null;
+const nearExit=(x,y,r)=>MAPS[curMap].exits.some(e=>cheb(x,y,e.x,e.y)<=r);
+const inLair=(x,y)=>curMap==='forest'&&dE(x,y,LAIR)<1;
 const houses=[[4,5],[15,5],[4,13],[15,13]];
 const FIRE={x:10*T+8,y:8*T+10};
 const SPAWN={x:10*T+8,y:10*T+14};
@@ -205,44 +225,88 @@ function gen(){
   set(10,8,GRASS);set(10,9,GRASS);
   for(let y=0;y<MH;y++)for(let x=0;x<MW;x++)if(at(x,y)===GRASS&&rnd()<.07)set(x,y,FLOWER);
 }
-gen();
+// "Шепчущий лес" 40×28 — the order of rnd() calls matters (layout is fixed by seed 20261)
+const GLADES=[[8,6,4,3],[25,5,4,3],[10,21,4,3]];
+function genForest(){
+  map.fill(MOSS);
+  for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){const e=Math.min(x,y,MW-1-x,MH-1-y);if(e<2||(e<3&&rnd()<.5))set(x,y,TREE)}
+  for(let y=2;y<=25;y++)for(let x=2;x<=37;x++)if(at(x,y)===MOSS&&rnd()<.4)set(x,y,TREE);
+  for(let y=0;y<MH;y++)for(let x=0;x<MW;x++)if(at(x,y)===MOSS){const r=rnd();if(r<.06)set(x,y,FERN);else if(r<.08)set(x,y,MUSH);else if(r<.095)set(x,y,STUMP)}
+  for(const g of GLADES)for(let y=2;y<=25;y++)for(let x=2;x<=37;x++)if(dE(x,y,g)<1)set(x,y,rnd()<.06?FLOWER:GRASS);
+  for(let y=2;y<=25;y++)for(let x=2;x<=37;x++){const d=dE(x,y,LAIR);if(d<1)set(x,y,GRASS);else if(d<1.8)set(x,y,TREE)}
+  for(const[cx,cy]of[[8,6],[25,5]])for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++){const h=Math.hypot(dx,dy);if(h>=1.6&&h<=2.4)set(cx+dx,cy+dy,MUSH)}
+  for(let y=2;y<=25;y++){const o=Math.round(1.5*Math.sin(.35*y));set(19+o,y,WATER);set(20+o,y,WATER)}
+  const rect=(x0,x1,y0,y1)=>{for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++)set(x,y,PATH)};
+  rect(0,17,13,14);rect(20,26,13,14);rect(8,8,9,12);rect(10,10,15,18);rect(24,24,6,12);rect(26,26,15,21);set(27,21,PATH);
+  for(const[x,y]of[[18,13],[19,13],[18,14],[19,14]])set(x,y,BRIDGE);
+  set(2,12,SIGN);
+}
 
 function pEll(g,cxp,cyp,w,h,col){
   g.fillStyle=col;const top=-Math.round(h/2);
   for(let j=0;j<h;j++){const t=(j+.5)/h*2-1;const hw=Math.round(w/2*Math.sqrt(Math.max(0,1-t*t)));
     if(hw>0)g.fillRect(cxp-hw,cyp+top+j,hw*2,1)}
 }
-const mapCv=document.createElement('canvas');mapCv.width=MW*T;mapCv.height=MH*T;
-(function render(){
+// palettes: the forest redraws old tiles darker
+const PAL={
+  meadow:{grass:'#6cbb48',grassD:['#5aa23b','#83cf5d'],path:'#d8b878',pathD:['#c29c5e','#e8cf9a'],edge:'#6cbb48',
+    water:'#3f86d0',waterR:'#6aaee8',waterT:'#8cc6ef',crown:['#235e2c','#2e7838','#3f9a45'],hl:'#62bd5e'},
+  forest:{grass:'#5aa23b',grassD:['#4c8f32','#6fbf4e'],path:'#b89a64',pathD:['#9a7e4e','#cdb27e'],edge:'#3f7a3a',
+    water:'#2f6fae',waterR:'#5a9ad8',waterT:'#7ab8e0',crown:['#173f22','#1f5a2c','#2c7034'],hl:'#4a9a4a'},
+};
+// pre-render the current map into its own canvas
+function prerenderMap(){
+  const M=MAPS[curMap],pal=PAL[curMap];
+  mapCv=M.cv=document.createElement('canvas');mapCv.width=MW*T;mapCv.height=MH*T;
   const g=mapCv.getContext('2d');
   const R=(x,y,w,h,c)=>{g.fillStyle=c;g.fillRect(x,y,w,h)};
+  const PATHY=t=>t===PATH||t===BRIDGE;
+  const isGlade=(x,y)=>curMap==='forest'&&(GLADES.some(gl=>dE(x,y,gl)<1)||dE(x,y,LAIR)<1);
+  const moss=(px,py)=>{R(px,py,16,16,'#3f7a3a');for(let i=0;i<5;i++)R(px+(rnd()*15|0),py+(rnd()*14|0),1,2,rnd()<.5?'#356a32':'#4f8f45');
+    if(rnd()<.4)R(px+(rnd()*15|0),py+(rnd()*15|0),1,1,'#6aa84f')};
+  const grass=(px,py)=>{R(px,py,16,16,pal.grass);for(let i=0;i<5;i++)R(px+(rnd()*15|0),py+(rnd()*14|0),1,2,rnd()<.5?pal.grassD[0]:pal.grassD[1])};
+  const ground=(x,y,px,py)=>curMap==='forest'&&!isGlade(x,y)?moss(px,py):grass(px,py);
   for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){
-    const t=at(x,y),px=x*T,py=y*T;
-    if(t===PATH){R(px,py,16,16,'#d8b878');
-      for(let i=0;i<4;i++)R(px+(rnd()*15|0),py+(rnd()*15|0),1+(rnd()*2|0),1,rnd()<.5?'#c29c5e':'#e8cf9a');
-      if(at(x,y-1)!==PATH&&at(x,y-1)!==HOUSE)for(let i=0;i<16;i+=2)R(px+i,py,1+(rnd()*2|0),1+(rnd()*2|0),'#6cbb48');
-      if(at(x,y+1)!==PATH&&at(x,y+1)!==HOUSE)for(let i=0;i<16;i+=2)R(px+i,py+15-(rnd()*2|0),1,2,'#6cbb48');
-      if(at(x-1,y)!==PATH&&at(x-1,y)!==HOUSE)for(let i=0;i<16;i+=2)R(px,py+i,1+(rnd()*2|0),1,'#6cbb48');
-      if(at(x+1,y)!==PATH&&at(x+1,y)!==HOUSE)for(let i=0;i<16;i+=2)R(px+15-(rnd()*2|0),py+i,2,1,'#6cbb48');
-    }else if(t===WATER){R(px,py,16,16,'#3f86d0');
-      for(let i=0;i<3;i++)R(px+(rnd()*12|0),py+(rnd()*15|0),3,1,'#6aaee8');
-      if(at(x,y-1)!==WATER)R(px,py,16,2,'#8cc6ef');
+    const t=at(x,y),px=x*T,py=y*T,ex=exitAt(x,y);
+    if(t===PATH){R(px,py,16,16,ex?'#b89a64':pal.path);
+      for(let i=0;i<4;i++)R(px+(rnd()*15|0),py+(rnd()*15|0),1+(rnd()*2|0),1,rnd()<.5?pal.pathD[0]:pal.pathD[1]);
+      const no=(a,b)=>!PATHY(at(a,b))&&at(a,b)!==HOUSE;
+      if(no(x,y-1))for(let i=0;i<16;i+=2)R(px+i,py,1+(rnd()*2|0),1+(rnd()*2|0),pal.edge);
+      if(no(x,y+1))for(let i=0;i<16;i+=2)R(px+i,py+15-(rnd()*2|0),1,2,pal.edge);
+      if(no(x-1,y)&&!ex)for(let i=0;i<16;i+=2)R(px,py+i,1+(rnd()*2|0),1,pal.edge);
+      if(no(x+1,y)&&!ex)for(let i=0;i<16;i+=2)R(px+15-(rnd()*2|0),py+i,2,1,pal.edge);
+      if(ex){const left=ex.dir==='left';for(const o of[0,4])for(const[a,b]of[[5,5],[6,6],[7,7],[6,8],[5,9]]){const xx=a+o;R(px+(left?15-xx:xx),py+b,1,1,'#8a6a3a')}}
+    }else if(t===BRIDGE){R(px,py,16,16,pal.water);R(px,py+2,16,12,'#a0703a');
+      for(let i=3;i<16;i+=4)R(px+i,py+2,1,12,'#6b4220');
+      R(px,py,16,2,'#6b4220');R(px,py+14,16,2,'#6b4220');
+    }else if(t===WATER){R(px,py,16,16,pal.water);
+      for(let i=0;i<3;i++)R(px+(rnd()*12|0),py+(rnd()*15|0),3,1,pal.waterR);
+      if(at(x,y-1)!==WATER&&at(x,y-1)!==BRIDGE)R(px,py,16,2,pal.waterT);
     }else if(t===SAND){R(px,py,16,16,'#e6d199');
       for(let i=0;i<4;i++)R(px+(rnd()*15|0),py+(rnd()*15|0),1,1,'#d1b675');
-    }else{R(px,py,16,16,'#6cbb48');
-      for(let i=0;i<5;i++)R(px+(rnd()*15|0),py+(rnd()*14|0),1,2,rnd()<.5?'#5aa23b':'#83cf5d');
+    }else if(t===MOSS||t===FERN||t===MUSH||t===STUMP){
+      if(t===MUSH)ground(x,y,px,py);else moss(px,py);
+      if(t===FERN)for(let k=0;k<2;k++){const fx=px+3+k*7+(rnd()*3|0),fy=py+4+(rnd()*4|0);R(fx,fy,1,5,'#2f6a2c');
+        for(let j=0;j<5;j+=2){R(fx-1,fy+j,1,1,'#5aa848');R(fx+1,fy+j,1,1,'#5aa848')}}
+      if(t===MUSH)for(let k=0;k<2;k++){const mx=px+2+k*7+(rnd()*4|0),my=py+4+(rnd()*6|0),c=['#d94a3a','#e8e0d0','#b0703a'][rnd()*3|0];
+        R(mx+1,my+2,1,2,'#f0e0c0');R(mx,my,3,2,c);if(c==='#d94a3a')R(mx+1,my,1,1,'#fff3e0')}
+      if(t===STUMP){R(px+4,py+8,8,6,'#6b4a2a');R(px+4,py+8,1,6,'#4a3018');R(px+4,py+6,8,3,'#c8a070');R(px+6,py+7,4,1,'#a87e4e');R(px+4,py+6,3,1,'#5aa23b')}
+    }else{
+      if(curMap==='forest'&&(t===TREE||t===SIGN))ground(x,y,px,py);else grass(px,py);
       if(t===FLOWER){const cols=['#ff8fb1','#fff3a8','#ffffff','#c9a0ff'];
         for(let i=0;i<2;i++){const fx=px+2+(rnd()*11|0),fy=py+2+(rnd()*11|0),c=cols[rnd()*4|0];
           R(fx-1,fy,3,1,c);R(fx,fy-1,1,3,c);R(fx,fy,1,1,'#ffb52e');R(fx,fy+2,1,1,'#3f8a33')}}
+      if(t===SIGN){const sg=signAt(x,y),m=(a,b,w,h,c)=>R(px+(sg&&sg.left?16-a-w:a),py+b,w,h,c);
+        m(7,7,2,9,'#6b4220');m(2,3,12,5,'#a0703a');m(2,7,12,1,'#6b4220');m(5,5,6,1,'#4a2c12');m(9,4,1,3,'#4a2c12')}
     }
   }
   for(let y=0;y<MH;y++)for(let x=0;x<MW;x++)if(at(x,y)===TREE){
     const px=x*T,py=y*T;
     R(px+6,py+10,4,6,'#7a4a26');R(px+6,py+10,1,6,'#5e381c');
-    pEll(g,px+8,py+7,16,13,'#235e2c');pEll(g,px+8,py+6,15,11,'#2e7838');
-    pEll(g,px+6,py+4,9,6,'#3f9a45');R(px+4,py+2,2,1,'#62bd5e');R(px+9,py+3,1,1,'#62bd5e');
+    pEll(g,px+8,py+7,16,13,pal.crown[0]);pEll(g,px+8,py+6,15,11,pal.crown[1]);
+    pEll(g,px+6,py+4,9,6,pal.crown[2]);R(px+4,py+2,2,1,pal.hl);R(px+9,py+3,1,1,pal.hl);
   }
-  for(const[hx,hy]of houses){const px=hx*T,py=hy*T;
+  if(curMap==='meadow')for(const[hx,hy]of houses){const px=hx*T,py=hy*T;
     R(px+46,py-3,6,9,'#8a6a5a');R(px+45,py-4,8,2,'#6b4f42');
     R(px+4,py+20,56,28,'#ecd9b2');R(px+4,py+44,56,4,'#d3b98a');
     for(let j=0;j<5;j++)R(px+4,py+24+j*5,56,1,'#dcc59a');
@@ -253,7 +317,20 @@ const mapCv=document.createElement('canvas');mapCv.width=MW*T;mapCv.height=MH*T;
     R(px+26,py+30,12,18,'#6b3d1f');R(px+27,py+31,10,17,'#7d4826');R(px+34,py+39,2,2,'#e8c060');
     for(const wx of[9,43]){R(px+wx,py+28,12,10,'#5b3a1f');R(px+wx+1,py+29,10,8,'#9fd8ff');R(px+wx+5,py+29,1,8,'#5b3a1f');R(px+wx+1,py+32,10,1,'#5b3a1f');R(px+wx+2,py+30,2,1,'#e6f6ff')}
   }
-})();
+}
+// meadow exactly as before, then its exit edits; then the forest with its own seed
+useMap('meadow');gen();
+for(const[x,y]of[[46,10],[47,10],[46,11],[47,11]])set(x,y,PATH);set(44,9,SIGN);
+prerenderMap();
+seed=20261;useMap('forest');genForest();prerenderMap();
+// cells of the forest reachable from the entrance — enemies appear only there
+const forestReach=new Uint8Array(40*28);
+{const q=[13*40+2];forestReach[q[0]]=1;
+  for(let h=0;h<q.length;h++){const i=q[h],x=i%40,y=(i/40)|0;
+    for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+dx,ny=y+dy,t=tileOf('forest',nx,ny);
+      if(nx<0||ny<0||nx>=40||ny>=28||forestReach[ny*40+nx])continue;
+      if(t===WATER||t===TREE||t===HOUSE||t===STUMP||t===SIGN)continue;forestReach[ny*40+nx]=1;q.push(ny*40+nx)}}}
+useMap('meadow');
 
 // ---------- audio ----------
 let AC=null;
@@ -305,6 +382,10 @@ const ITEMS={
   pot_hp:{n:'Зелье здоровья',type:'use',heal:.4,ap:2,w:.5,stack:true,icon:'potion',tint:'#e8434b',d:'Лечит 40% здоровья'},
   pot_mp:{n:'Зелье маны',type:'use',mana:.5,ap:2,w:.5,stack:true,icon:'potion',tint:'#4f9dff',d:'Восстанавливает 50% маны'},
   goo:{n:'Слизь',type:'junk',w:.2,stack:true,icon:'goo',tint:'#7ad35a',d:'Пригодится торговцу'},
+  forest_mush:{n:'Лесной гриб',type:'use',heal:.25,mana:.15,ap:2,w:.3,stack:true,icon:'mush',tint:'#a0582a',d:'Лечит 25% здоровья и 15% маны'},
+  bow_ash:{n:'Ясеневый лук',type:'bow',dmg:[9,13],ap:4,range:8,w:3,icon:'bow',tint:'#d8b878',d:'Тугой, но лёгкий: бьёт почти как длинный, а быстрее'},
+  bark_armor:{n:'Кора-доспех',type:'armor',ac:7,def:3,w:8,icon:'armor',tint:'#6b4a2a',d:'Пластины старой коры на ремешках — лёгкие и крепкие'},
+  heart_forest:{n:'Сердце леса',type:'trinket',bonus:{end:1,per:1},w:.2,icon:'amulet',tint:'#9fe07a',d:'+1 к Выносливости и Восприятию. Тёплый жёлудь, подарок Древнего пня'},
 };
 const SLOTS=[['melee','Ближний бой'],['bow','Лук'],['armor','Броня'],['trinket','Амулет']];
 const ICON={};
@@ -324,6 +405,7 @@ function makeIcon(id){
     if(id==='chain')for(let y=4;y<13;y+=2)for(let x=3+(y%4?1:0);x<13;x+=2)R(x,y,1,1,'#6c7480');R(3,12,10,1,'rgba(0,0,0,.25)')}
   else if(it.icon==='amulet'){for(let i=0;i<6;i++){R(3+i,1+i,1,1,'#c9a64a');R(12-i,1+i,1,1,'#c9a64a')}pEll(g,8,10,8,8,'#c9a64a');pEll(g,8,10,6,6,t);R(6,8,2,2,'rgba(255,255,255,.75)')}
   else if(it.icon==='ring'){pEll(g,8,10,10,9,'#e0b040');pEll(g,8,10,6,5,'rgba(0,0,0,0)');g.clearRect(6,8,4,5);R(6,3,4,4,t);R(6,3,1,1,'#ffffff')}
+  else if(it.icon==='mush'){pEll(g,8,6,13,7,'#7a3e1c');pEll(g,8,5,11,5,t);R(6,8,4,6,'#f0e0c0');R(9,8,1,6,'#d8c49c');R(5,4,2,1,'#f5e6c8');R(10,3,1,1,'#f5e6c8')}
   else if(it.icon==='goo'){pEll(g,8,11,13,9,'#4c9e3a');pEll(g,8,10,11,7,t);R(5,8,2,2,'#d2f7b8')}
   return c;
 }
@@ -391,22 +473,33 @@ const rngTxt=r=>Math.round(r[0])+'–'+Math.round(r[1]);
 // ---------- grid ----------
 const FIREC=[10,8];
 const cellPx=(gx,gy)=>({x:gx*T+8,y:gy*T+13});
-function walkable(x,y){const t=at(x,y);return t!==WATER&&t!==TREE&&t!==HOUSE&&!(x===FIREC[0]&&y===FIREC[1])&&!chestAt(x,y)&&!npcAt(x,y)}
+function walkable(x,y){const t=at(x,y);if(t===WATER||t===TREE||t===HOUSE||t===STUMP||t===SIGN)return false;
+  if(curMap==='meadow'&&x===FIREC[0]&&y===FIREC[1])return false;
+  return!chestAt(x,y)&&!npcAt(x,y)&&!shroomAt(x,y)&&!stumpDecoAt(x,y)}
+// lair mushrooms (objects, not tiles) and the calmed stump that stays as scenery
+const shroomAt=(x,y)=>curMap==='forest'?MAPS.forest.shrooms.find(m=>m.alive&&m.x===x&&m.y===y):null;
+const STUMPC=[33,21];
+const stumpDecoAt=(x,y)=>curMap==='forest'&&P.flags.stumpDown&&x===STUMPC[0]&&y===STUMPC[1];
+// where an enemy may stand: never on exits; the stump only in its lair; forest folk stay out of the lair
+function foeCan(e,x,y){if(exitAt(x,y))return false;if(e.boss)return inLair(x,y);if(e.still)return true;
+  return!(curMap==='forest'&&dE(x,y,LAIR)<1.8)}
 // chests: fixed spots, contents saved per chest
 const CHEST_DEF=[
-  {at:[7,20],loot:[['pot_hp',2],['arrows',10]]},
+  {map:'meadow',at:[7,20],loot:[['pot_hp',2],['arrows',10]]},
   {at:[25,5],loot:[['sword_iron',1],['goo',2]]},
   {at:[31,18],loot:[['bow_long',1],['arrows',15]]},
   {at:[42,20],loot:[['leather',1],['ring_agi',1]]},
   {at:[44,5],loot:[['chain',1],['amulet_luck',1],['pot_mp',2]]},
   {at:[22,27],loot:[['charm_int',1],['dagger',1],['pot_hp',1]]},
+  {map:'forest',at:[28,6],loot:[['bow_ash',1],['arrows',15]]},
+  {map:'forest',at:[8,22],loot:[['bark_armor',1],['forest_mush',2],['pot_mp',1]]},
 ];
 let chests=[];
-function placeChests(){chests=CHEST_DEF.map((c,i)=>{let[x,y]=c.at;
-  const ok=(a,b)=>{const t=at(a,b);return(t===GRASS||t===FLOWER||t===SAND)};
+function placeChests(){chests=CHEST_DEF.map((c,i)=>{let[x,y]=c.at;const mp=c.map||'meadow';
+  const ok=(a,b)=>{const t=tileOf(mp,a,b);return(t===GRASS||t===FLOWER||t===SAND||t===MOSS||t===FERN)};
   if(!ok(x,y)){outer:for(let r=1;r<6;r++)for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++)if(ok(x+dx,y+dy)){x+=dx;y+=dy;break outer}}
-  return{i,x,y,loot:c.loot.map(l=>l.slice()),open:false}})}
-const chestAt=(x,y)=>chests.find(c=>c.x===x&&c.y===y);
+  return{i,map:mp,x,y,loot:c.loot.map(l=>l.slice()),open:false}})}
+const chestAt=(x,y)=>chests.find(c=>c.map===curMap&&c.x===x&&c.y===y);
 function openChest(c){
   if(c.open&&!c.loot.length){ftext(c.x*T+8,c.y*T,'Пусто','#d8d8e8',5,1);return}
   c.open=true;snd(330,660,.2,'triangle',.06);burst(c.x*T+8,c.y*T+6,'#ffd27a',10,50);
@@ -420,14 +513,15 @@ const distE=(a,b)=>cheb(a.gx,a.gy,b.gx,b.gy);
 function unitAt(x,y,except){if(P.dead<=0&&P!==except&&P.gx===x&&P.gy===y)return P;for(const e of enemies)if(e!==except&&e.hp>0&&e.gx===x&&e.gy===y)return e;return null}
 const DIRS=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]];
 // breadth-first search on the 8-way grid; every step costs 1 AP
-function findPath(sx,sy,goal,blocked){
+// foe (optional): an enemy — then cells it may not stand on (foeCan) are skipped
+function findPath(sx,sy,goal,blocked,foe){
   const prev=new Int32Array(MW*MH).fill(-1),seen=new Uint8Array(MW*MH);
   const q=[sy*MW+sx];seen[q[0]]=1;
   for(let h=0;h<q.length;h++){
     const i=q[h],x=i%MW,y=(i/MW)|0;
     if(h>0&&goal(x,y)){const path=[];let c=i;while(c!==q[0]){path.push([c%MW,(c/MW)|0]);c=prev[c]}return path.reverse()}
     for(const[dx,dy]of DIRS){const nx=x+dx,ny=y+dy;if(nx<0||ny<0||nx>=MW||ny>=MH)continue;const ni=ny*MW+nx;
-      if(seen[ni]||!walkable(nx,ny))continue;if(dx&&dy&&(!walkable(x+dx,y)||!walkable(x,y+dy)))continue;
+      if(seen[ni]||!walkable(nx,ny))continue;if(foe&&!foeCan(foe,nx,ny))continue;if(dx&&dy&&(!walkable(x+dx,y)||!walkable(x,y+dy)))continue;
       if(blocked(nx,ny)&&!goal(nx,ny))continue;seen[ni]=1;prev[ni]=i;q.push(ni)}
     if(q.length>4000)break;
   }
@@ -455,7 +549,8 @@ function stepMovers(dt){
     if(!ent.mv)continue;const m=ent.mv;m.t+=dt/ent.stepDur;const p=Math.min(1,m.t);
     const ox=ent.x,oy=ent.y;ent.x=m.fx+(m.tx-m.fx)*p;ent.y=m.fy+(m.ty-m.fy)*p;
     if(ent.hero)P.walk+=Math.hypot(ent.x-ox,ent.y-oy);else ent.z=Math.sin(p*Math.PI)*5;
-    if(p>=1){ent.x=m.tx;ent.y=m.ty;ent.mv=null;if(!ent.hero)ent.z=0;nextStep(ent)}
+    if(ent.boss)ent.z*=.3;
+    if(p>=1){ent.x=m.tx;ent.y=m.ty;ent.mv=null;if(!ent.hero)ent.z=0;if(ent.hero)heroArrived();nextStep(ent)}
   }
 }
 const faceDir=(dx,dy)=>Math.abs(dx)>=Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up');
@@ -467,12 +562,12 @@ const until=fn=>new Promise(r=>{if(fn())r();else waiters.push({fn,r})});
 
 // ---------- save ----------
 const SAVE_KEY='teplyruchey_save_v3';
-function save(){if(!running||combat)return;try{localStorage.setItem(SAVE_KEY,JSON.stringify({gx:P.gx,gy:P.gy,lvl:P.lvl,xp:P.xp,pts:P.pts,coins:P.coins,st:P.st,perks:P.perks,perkPicks:P.perkPicks,perkChoice:P.perkChoice,hp:P.hp,mp:P.mp,bag:P.bag,eq:P.eq,q:P.q,up:P.up,flags:P.flags,cat:{follow:CAT.follow,home:CAT.home},chests:chests.map(c=>({open:c.open,loot:c.loot}))}))}catch(_){}}
+function save(){if(!running||combat)return;try{localStorage.setItem(SAVE_KEY,JSON.stringify({map:curMap,gx:P.gx,gy:P.gy,lvl:P.lvl,xp:P.xp,pts:P.pts,coins:P.coins,st:P.st,perks:P.perks,perkPicks:P.perkPicks,perkChoice:P.perkChoice,hp:P.hp,mp:P.mp,bag:P.bag,eq:P.eq,q:P.q,up:P.up,flags:P.flags,cat:{follow:CAT.follow,home:CAT.home},chests:chests.map(c=>({open:c.open,loot:c.loot}))}))}catch(_){}}
 function loadSave(){try{const s=JSON.parse(localStorage.getItem(SAVE_KEY)||localStorage.getItem('teplyruchey_save_v2')||'null');return s&&s.st&&s.lvl?s:null}catch(_){return null}}
 
 // ---------- state ----------
 let enemies=[],items=[],parts=[],texts=[],bolts=[],time=0,shake=0,spawnT=0,running=false,paused=false,hintT=9,banner=null,camX=0,camY=0;
-let combat=null,busy=false,mode='melee',preview=null,hoverCell=null,tipShown=false;
+let combat=null,busy=false,mode='melee',preview=null,hoverCell=null,tipShown=false,fade=null;
 const keys={};
 
 // ---------- input ----------
@@ -507,8 +602,9 @@ function clientToCell(cxp,cyp){const[x,y]=clientToWorld(cxp,cyp);return[Math.flo
 function pickCell(cxp,cyp,touch){
   const[x,y]=clientToWorld(cxp,cyp);let best=null,bd=touch?13:8;
   for(const e of enemies)if(e.hp>0){const d=Math.hypot(e.x-x,e.y-6-y);if(d<bd){bd=d;best=[e.gx,e.gy]}}
-  for(const c of chests){const d=Math.hypot(c.x*T+8-x,c.y*T+7-y);if(d<bd){bd=d;best=[c.x,c.y]}}
-  if(!combat){for(const n of NPCS){const d=Math.hypot(n.x-x,n.y-8-y);if(d<bd){bd=d;best=[n.gx,n.gy]}}
+  for(const c of chests)if(c.map===curMap){const d=Math.hypot(c.x*T+8-x,c.y*T+7-y);if(d<bd){bd=d;best=[c.x,c.y]}}
+  if(curMap==='forest')for(const m of MAPS.forest.shrooms)if(m.alive){const d=Math.hypot(m.x*T+8-x,m.y*T+9-y);if(d<bd){bd=d;best=[m.x,m.y]}}
+  if(curMap==='meadow'&&!combat){for(const n of NPCS){const d=Math.hypot(n.x-x,n.y-8-y);if(d<bd){bd=d;best=[n.gx,n.gy]}}
     if(!CAT.home&&!CAT.follow){const d=Math.hypot(CAT.x-x,CAT.y-4-y);if(d<bd){bd=d;best=[CAT.gx,CAT.gy]}}}
   if(!best&&touch&&preview&&preview.cell){const c=cellPx(preview.cell[0],preview.cell[1]);if(Math.hypot(c.x-x,c.y-6-y)<12)best=preview.cell.slice()}
   return best||[Math.floor(x/T),Math.floor(y/T)];
@@ -546,7 +642,10 @@ function tapCell(x,y,direct){
     if(np){if(cheb(P.gx,P.gy,x,y)<=1&&!P.mv){talk(np);return}
       const path=findPath(P.gx,P.gy,(a,b)=>cheb(a,b,x,y)<=1,(a,b)=>!!unitAt(a,b,P));
       if(path)setPath(P,path,1/D.walk()).then(()=>{if(!combat&&!paused&&cheb(P.gx,P.gy,np.gx,np.gy)<=1)talk(np)});return}
-    if(!CAT.home&&!CAT.follow&&x===CAT.gx&&y===CAT.gy){
+    const sg=signAt(x,y);if(sg){ftext(x*T+8,y*T,sg.s,'#f5e6c8',5,1.6);return}
+    if(stumpDecoAt(x,y)){ftext(x*T+8,y*T-10,'Хрр… хрр…','#cfe8c0',5,1.4);return}
+    const ex=exitAt(x,y);if(ex&&x===P.gx&&y===P.gy&&!P.mv){switchMap(ex);return}
+    if(curMap==='meadow'&&!CAT.home&&!CAT.follow&&x===CAT.gx&&y===CAT.gy){
       const meet=()=>{if(qState('cat')==='active'){CAT.follow=true;banner={s:'Пушок идёт за тобой. Веди его к Ане!',t:2.4};snd(800,1200,.15,'triangle',.05)}else ftext(CAT.x,CAT.y-12,'Мяу?','#ffffff',5,1.2)};
       if(cheb(P.gx,P.gy,x,y)<=1&&!P.mv){meet();return}
       const path=findPath(P.gx,P.gy,(a,b)=>cheb(a,b,x,y)<=1,(a,b)=>!!unitAt(a,b,P));
@@ -811,7 +910,7 @@ function endCombat(win){
 function spawnSlime(){
   for(let i=0;i<80;i++){const tx=24+(Math.random()*(MW-27)|0),ty=3+(Math.random()*(MH-6)|0),t=at(tx,ty);
     if(t!==GRASS&&t!==FLOWER)continue;if(unitAt(tx,ty)||chestAt(tx,ty))continue;
-    if(cheb(tx,ty,P.gx,P.gy)<10)continue;
+    if(cheb(tx,ty,P.gx,P.gy)<10||nearExit(tx,ty,3))continue;
     const blue=Math.random()<.28,hp=blue?38:22,p=cellPx(tx,ty);
     enemies.push({gx:tx,gy:ty,x:p.x,y:p.y,z:0,path:[],mv:null,stepDur:.3,onDone:null,flash:0,blue,hp,max:hp,atk:blue?9:6,xp:blue?8:5,
       maxAp:blue?6:5,seq:blue?8:5,ac:blue?10:5,ph:Math.random()*6,wander:1+Math.random()*2,inCombat:false,lunge:0,apPen:0});return}
@@ -819,10 +918,70 @@ function spawnSlime(){
 function burst(x,y,col,n,sp){for(let i=0;i<n;i++){const a=Math.random()*6.28,s=(sp||60)*(.4+Math.random());
   parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-20,life:.4+Math.random()*.4,max:.8,col,sz:Math.random()<.4?2:1})}}
 function ftext(x,y,s,col,size,life){texts.push({x,y,s,col,size:size||6,life:life||1,max:life||1})}
-function respawn(){const p=cellPx(SPAWNC[0],SPAWNC[1]);P.gx=SPAWNC[0];P.gy=SPAWNC[1];P.x=p.x;P.y=p.y;P.mv=null;P.path=[];
+function respawn(){if(curMap!=='meadow'){setMap('meadow');populate()}if(CAT.follow){CAT.x=cellPx(SPAWNC[0],SPAWNC[1]).x-10;CAT.y=cellPx(SPAWNC[0],SPAWNC[1]).y}
+  const p=cellPx(SPAWNC[0],SPAWNC[1]);P.gx=SPAWNC[0];P.gy=SPAWNC[1];P.x=p.x;P.y=p.y;P.mv=null;P.path=[];
   P.hp=D.maxHp();P.mp=D.maxMp();P.dir='down';
   const lost=Math.floor(P.coins/4);P.coins-=lost;banner={s:lost?'Отдохнул у костра (−'+lost+' монет)':'Отдохнул у костра',t:2.5};save()}
 const SPAWNC=[10,10];
+
+// ---------- maps: switching and transitions ----------
+// swap the current map; enemies and items of the old map stay with it
+function setMap(to){
+  const M=MAPS[curMap];
+  for(const e of enemies){e.inCombat=false;e.path=[];if(e.mv){e.mv=null;const p=cellPx(e.gx,e.gy);e.x=p.x;e.y=p.y;e.z=0}
+    if(e.onDone){const r=e.onDone;e.onDone=null;r()}}
+  M.enemies=enemies.filter(e=>e.hp>0&&!e.still);M.items=items;
+  useMap(to);const N=MAPS[to];enemies=N.enemies;items=N.items;
+  if(to==='forest'){for(const r of N.rings)r.used=false;if(!P.flags.stumpDown)for(const m of N.shrooms)m.alive=true}
+}
+// fill an empty map with its folk
+function populate(){
+  if(curMap==='meadow'){if(!enemies.length)for(let i=0;i<9;i++)spawnSlime();return}
+  if(typeof spawnForestFoe==='function'&&!enemies.some(e=>!e.boss&&!e.still))for(let i=0;i<4;i++)spawnForestFoe();
+  if(typeof spawnStump==='function'&&!P.flags.stumpDown&&!enemies.some(e=>e.boss))spawnStump();
+}
+function snapCam(){camX=Math.max(0,Math.min(MW*T-VW,P.x-VW/2));camY=Math.max(0,Math.min(MH*T-VH,P.y-8-VH/2))}
+async function switchMap(ex){
+  if(busy||combat||P.dead>0)return;
+  busy=true;P.path=[];preview=null;P.grace=.5;fade={a:0,dir:1};
+  try{
+    await wait(.35);
+    setMap(ex.to);placeHero(ex.tx,ex.ty);P.dir=ex.dir;
+    if(CAT.follow){CAT.x=P.x+(ex.dir==='right'?-12:12);CAT.y=P.y;CAT.gx=Math.floor(CAT.x/T);CAT.gy=Math.floor(CAT.y/T)}
+    populate();snapCam();P.grace=1.85;fade.a=1;fade.dir=-1;
+    banner={s:MAPS[curMap].name,t:2};snd(330,520,.3,'triangle',.05);save();
+    await wait(.35);
+  }finally{fade=null;busy=false}
+}
+// ---------- forest: rings, ambience ----------
+let whisperT=8,sparkT=0;
+function forestArrive(){
+  if(curMap!=='forest')return;
+  if(!combat)for(const r of MAPS.forest.rings)if(!r.used&&r.x===P.gx&&r.y===P.gy){r.used=true;
+    P.mp=D.maxMp();P.hp=Math.min(D.maxHp(),P.hp+Math.round(D.maxHp()*.3));
+    burst(P.x,P.y-8,'#c9a0ff',14,50);ftext(P.x,P.y-24,'Грибы шепчут: отдохни…','#e0c8ff',5,2);snd(523,1046,.3,'triangle',.05)}
+  if(typeof stumpCheckLair==='function')stumpCheckLair();
+}
+function forestTick(dt){
+  if(curMap!=='forest')return;
+  // fireflies drift up slowly
+  if(Math.random()<1.5*dt)parts.push({x:CX+Math.random()*VW,y:CY+Math.random()*VH,vx:(Math.random()-.5)*6,vy:-6,life:1.5,max:1.5,col:'#fff6a0',sz:1,nog:1});
+  // a charged ring sparkles at its centre
+  if((sparkT-=dt)<=0){sparkT=.5;for(const r of MAPS.forest.rings)if(!r.used){const p=cellPx(r.x,r.y);
+    parts.push({x:p.x+(Math.random()*8-4),y:p.y-4,vx:0,vy:-10,life:.9,max:.9,col:'#e0c8ff',sz:1,nog:1})}}
+  // the forest whispers from a tree in view (twice as rarely once the stump sleeps)
+  if((whisperT-=dt)<=0){whisperT=(10+Math.random()*4)*(P.flags.stumpDown?2:1);
+    const x0=Math.floor(CX/T),y0=Math.floor(CY/T),cand=[];
+    for(let y=y0;y<y0+Math.ceil(VH/T);y++)for(let x=x0;x<x0+Math.ceil(VW/T);x++)if(at(x,y)===TREE&&y>0)cand.push([x,y]);
+    if(cand.length){const[x,y]=cand[Math.random()*cand.length|0];ftext(x*T+8,y*T+2,'ш-ш-ш…','#cfe8c0',4.5,1.6)}}
+}
+// the hero finished a step onto a cell
+function heroArrived(){
+  if(P.dead>0)return;
+  const ex=exitAt(P.gx,P.gy);
+  if(ex){if(combat)ftext(P.x,P.y-22,'Сначала закончи бой','#ffd27a',5,1.2);else{P.path=[];switchMap(ex)}return}
+  if(typeof forestArrive==='function')forestArrive();
+}
 
 // ---------- update ----------
 function update(dt){
@@ -831,7 +990,8 @@ function update(dt){
   for(const t of timers)t.t-=dt;const done=timers.filter(t=>t.t<=0);timers=timers.filter(t=>t.t>0);for(const t of done)t.r();
   for(const w of waiters)if(w.fn()){w.ok=1;w.r()}waiters=waiters.filter(w=>!w.ok);
   stepMovers(dt);
-  if(P.atk>0)P.atk-=dt;if(P.hurtT>0)P.hurtT-=dt;
+  if(P.atk>0)P.atk-=dt;if(P.hurtT>0)P.hurtT-=dt;if(P.grace>0)P.grace-=dt;
+  if(fade)fade.a=clamp(fade.a+fade.dir*dt/.35,0,1);
   if(P.dead>0){P.dead-=dt;if(P.dead<=0)respawn()}
   else if(!combat){
     P.mp=Math.min(D.maxMp(),P.mp+D.mpRegen()*dt);P.calm+=dt;if(P.calm>3)P.hp=Math.min(D.maxHp(),P.hp+D.hpRegen()*dt);
@@ -849,8 +1009,9 @@ function update(dt){
     if(!combat&&e.hp>0){
       if(!e.mv){e.wander-=dt;if(e.wander<=0){e.wander=1.2+Math.random()*2.2;
         const d=DIRS[Math.random()*8|0],nx=e.gx+d[0],ny=e.gy+d[1];
-        if(walkable(nx,ny)&&!unitAt(nx,ny,e)&&nx>=24)setPath(e,[[nx,ny]],.35)}}
-      if(P.dead<=0&&P.gx>=20&&distE(P,e)<=D.aggro()&&los(e.gx,e.gy,P.gx,P.gy))startCombat(false);
+        if(!e.still&&!e.asleep&&walkable(nx,ny)&&!unitAt(nx,ny,e)&&foeCan(e,nx,ny)&&(curMap==='meadow'?nx>=24:nx>=6))setPath(e,[[nx,ny]],.35)}}
+      const safe=curMap==='meadow'?P.gx<20:P.gx<=4;
+      if(P.dead<=0&&!busy&&!e.asleep&&!(P.grace>0)&&!safe&&distE(P,e)<=D.aggro()&&los(e.gx,e.gy,P.gx,P.gy))startCombat(false);
     }
   }
   enemies=enemies.filter(e=>e.hp>0||e.inCombat&&combat);
@@ -860,7 +1021,10 @@ function update(dt){
     if(b.left<=0){b.gone=1;b.done()}
   }
   bolts=bolts.filter(b=>!b.gone);
-  if(!combat){spawnT-=dt;if(spawnT<=0){spawnT=5;if(enemies.length<9)spawnSlime();save()}}
+  if(!combat){spawnT-=dt;if(spawnT<=0){
+    if(curMap==='meadow'){spawnT=5;if(enemies.length<9)spawnSlime()}
+    else{spawnT=8;if(typeof spawnForestFoe==='function'&&enemies.filter(e=>!e.boss&&!e.still).length<6)spawnForestFoe()}
+    save()}}
   for(const it of items){it.t+=dt;
     if(it.z>0||it.vz){it.vz-=320*dt;it.z+=it.vz*dt;if(it.z<0){it.z=0;it.vz=-it.vz*.45;if(Math.abs(it.vz)<25)it.vz=0}}
     if(P.dead>0||it.t<.4)continue;
@@ -874,7 +1038,8 @@ function update(dt){
       else if(it.kind==='mana'){const m=Math.round(D.maxMp()*.3);P.mp=Math.min(D.maxMp(),P.mp+m);snd(700,1100,.2,'triangle',.06);ftext(P.x,P.y-20,'+'+m+' маны','#8fc4ff',5,.9)}}
   }
   items=items.filter(i=>!i.got);
-  for(const p of parts){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=120*dt;p.vx*=.96;p.life-=dt}
+  forestTick(dt);
+  for(const p of parts){p.x+=p.vx*dt;p.y+=p.vy*dt;if(!p.nog)p.vy+=120*dt;p.vx*=.96;p.life-=dt}
   parts=parts.filter(p=>p.life>0);
   for(const t of texts){t.y-=16*dt;t.life-=dt}
   texts=texts.filter(t=>t.life>0);
@@ -890,15 +1055,16 @@ const NPCS=[
   {id:'anya',n:'Аня',role:'',at:[8,8],pal:{hair:'#e8c050',hairL:'#f8dc80',tunic:'#e87aa0',tunicD:'#c05a80',pants:'#e87aa0',pantsD:'#c05a80'},long:true,dress:true},
 ];
 for(const n of NPCS){const p=cellPx(n.at[0],n.at[1]);Object.assign(n,{gx:n.at[0],gy:n.at[1],x:p.x,y:p.y,dir:'down'})}
-const npcAt=(x,y)=>NPCS.find(n=>n.gx===x&&n.gy===y);
+const npcAt=(x,y)=>curMap==='meadow'?NPCS.find(n=>n.gx===x&&n.gy===y):null;
 const QUESTS={
   slimes:{n:'Слаймы на лугу',giver:'efim',goal:5,d:'Прогони 5 слаймов с луга к востоку и вернись к Ефиму.',rw:{coins:30,xp:20}},
   blues:{n:'Синяя напасть',giver:'efim',goal:3,d:'Победи 3 синих слайма и вернись к Ефиму.',rw:{coins:50,xp:40,items:[['pot_hp',2]]}},
   goo:{n:'Слизь для зелий',giver:'mira',goal:5,d:'Принеси Мире 5 слизи.',rw:{xp:25,items:[['pot_hp',2],['pot_mp',1]]}},
   cat:{n:'Где Пушок?',giver:'anya',goal:1,d:'Найди кота Ани в лесу на востоке и приведи домой.',rw:{coins:40,xp:30,items:[['amulet_luck',1]]}},
 };
-const VAL={arrows:1,pot_hp:15,pot_mp:15,dagger:25,sword_wood:5,sword_iron:60,bow_short:12,bow_long:70,jacket:8,leather:45,chain:110,amulet_luck:80,ring_agi:80,charm_int:80,goo:4};
-const STOCK={boris:[['arrows',5],['pot_hp',1],['pot_mp',1],['dagger',1],['sword_iron',1],['bow_long',1],['leather',1],['chain',1]],mira:[['pot_hp',1],['pot_mp',1]]};
+const VAL={arrows:1,pot_hp:15,pot_mp:15,dagger:25,sword_wood:5,sword_iron:60,bow_short:12,bow_long:70,jacket:8,leather:45,chain:110,amulet_luck:80,ring_agi:80,charm_int:80,goo:4,
+  forest_mush:10,bow_ash:95,bark_armor:75,heart_forest:150};
+const STOCK={boris:[['arrows',5],['pot_hp',1],['pot_mp',1],['dagger',1],['sword_iron',1],['bow_long',1],['leather',1],['chain',1]],mira:[['pot_hp',1],['pot_mp',1],['forest_mush',1]]};
 const buyMul=v=>clamp(1.4-stv('cha')*.05,.8,1.4)*(P.flags.discount?.9:1)*(v==='mira'?.8:1);
 const sellMul=()=>clamp(.25+stv('cha')*.03,.25,.6);
 const buyPrice=(id,v)=>Math.max(1,Math.round(VAL[id]*buyMul(v)));
@@ -1201,18 +1367,18 @@ function preset(id){const pr=PRESETS[id];P.st={...pr};P.pts=35+CREATE_PTS-Object
 function updBadge(){const n=P.pts+(P.perkPicks>0?1:0),b=$('badge');b.style.display=n>0?'block':'none';b.textContent=P.perkPicks>0?'★':P.pts}
 
 // ---------- start ----------
-function placeHero(gx,gy){if(!walkable(gx,gy))[gx,gy]=SPAWNC;const p=cellPx(gx,gy);P.gx=gx;P.gy=gy;P.x=p.x;P.y=p.y;P.mv=null;P.path=[]}
+function placeHero(gx,gy){if(!walkable(gx,gy))[gx,gy]=MAPS[curMap].spawn;const p=cellPx(gx,gy);P.gx=gx;P.gy=gy;P.x=p.x;P.y=p.y;P.mv=null;P.path=[]}
 function beginGame(){
   panel.classList.remove('open');pmode='hero';paused=false;running=true;$('start').style.display='none';
   P.hp=Math.min(P.hp||D.maxHp(),D.maxHp());if(!(P.mp>=0))P.mp=D.maxMp();
-  if(!enemies.length)for(let i=0;i<9;i++)spawnSlime();
-  camX=Math.max(0,Math.min(MW*T-VW,P.x-VW/2));camY=Math.max(0,Math.min(MH*T-VH,P.y-8-VH/2));
+  populate();snapCam();
   setMode('melee');updBadge();updButtons();save();snd(523,784,.2,'triangle',.05);
 }
 function initAudio(){if(AC)return;try{AC=new(window.AudioContext||window.webkitAudioContext)();AC.resume&&AC.resume()}catch(_){AC=null}}
 function newHero(){initAudio();
   Object.assign(P,{dir:'down',lvl:1,xp:0,pts:CREATE_PTS,coins:0,st:{str:5,per:5,end:5,cha:5,int:5,agi:5,luck:5},perks:[],perkPicks:0,perkChoice:null,dead:0});
-  P.bag=START_BAG.map(([id,qty])=>({id,qty}));P.eq={...START_EQ};P.q={};P.up={};P.flags={};placeChests();CAT.follow=false;CAT.home=false;placeCat();
+  P.bag=START_BAG.map(([id,qty])=>({id,qty}));P.eq={...START_EQ};P.q={};P.up={};P.flags={};if(curMap!=='meadow')setMap('meadow');placeChests();CAT.follow=false;CAT.home=false;placeCat();
+  for(const m of MAPS.forest.shrooms)m.alive=true;
   placeHero(SPAWNC[0],SPAWNC[1]);P.hp=D.maxHp();P.mp=D.maxMp();
   $('start').style.display='none';pmode='create';panel.classList.add('open');renderPanel()}
 function continueGame(s){initAudio();
@@ -1222,7 +1388,9 @@ function continueGame(s){initAudio();
   P.eq={...START_EQ,...(s.eq||{})};for(const k in P.eq)if(P.eq[k]&&!ITEMS[P.eq[k]])P.eq[k]=null;
   P.q=s.q||{};P.up=s.up||{};P.flags=s.flags||{};CAT.follow=!!(s.cat&&s.cat.follow);CAT.home=!!(s.cat&&s.cat.home);placeCat();if(CAT.home)catHome();
   placeChests();if(Array.isArray(s.chests))s.chests.forEach((c,i)=>{if(chests[i]){chests[i].open=!!c.open;chests[i].loot=(c.loot||[]).filter(l=>ITEMS[l[0]])}});
-  if(s.gx!==undefined)placeHero(s.gx,s.gy);else placeHero(SPAWNC[0],SPAWNC[1]);
+  for(const m of MAPS.forest.shrooms)m.alive=!P.flags.stumpDown;
+  if(s.map==='forest')setMap('forest');
+  if(s.gx!==undefined)placeHero(s.gx,s.gy);else placeHero(...MAPS[curMap].spawn);
   if(!(P.hp>0))P.hp=D.maxHp();beginGame();if(CAT.follow){CAT.x=P.x-10;CAT.y=P.y}}
 placeChests();placeCat();placeHero(SPAWNC[0],SPAWNC[1]);
 (function startScreen(){
@@ -1392,13 +1560,15 @@ function render(){
   if(tapMark&&!combat)cellBox(tapMark.x,tapMark.y,'rgba(255,255,255,'+tapMark.t*1.4+')');
   if(combat&&combat.active&&combat.active!==P)cellBox(combat.active.gx,combat.active.gy,'rgba(255,210,122,.8)');
   drawPreview();
-  drawFire();
+  if(curMap==='meadow')drawFire();
   const list=[];for(const e of enemies)if(e.hp>0)list.push([e.y,()=>drawSlime(e)]);for(const it of items)list.push([it.y,()=>drawItem(it)]);
-  for(const c of chests)list.push([c.y*T+13,()=>drawChest(c)]);
-  for(const n of NPCS)list.push([n.y,()=>drawNpc(n)]);
-  list.push([CAT.y-.5,drawCat]);
+  for(const c of chests)if(c.map===curMap)list.push([c.y*T+13,()=>drawChest(c)]);
+  if(curMap==='meadow')for(const n of NPCS)list.push([n.y,()=>drawNpc(n)]);
+  if(curMap==='meadow'||CAT.follow)list.push([CAT.y-.5,drawCat]);
+  if(typeof forestObjects==='function')forestObjects(list);
   list.push([P.y,drawHero]);list.sort((a,b)=>a[0]-b[0]);
   if(P.dir==='up')drawSlash();for(const[,f]of list)f();if(P.dir!=='up')drawSlash();
+  if(curMap==='forest'){cx.fillStyle='rgba(20,40,30,.12)';cx.fillRect(0,0,VW,VH)}
   for(const b of bolts)drawBolt(b);
   for(const p of parts){cx.globalAlpha=Math.min(1,p.life/p.max*1.5);cx.fillStyle=p.col;cx.fillRect(wx(p.x),wy(p.y),p.sz,p.sz)}
   cx.globalAlpha=1;
@@ -1433,7 +1603,7 @@ function render(){
     const k=S/H;otext(label,c.x-CX,c.y-CY-18,5.5/k*1.1,preview.ok?'#ffffff':'#ff9a9a',null,S);
     if(TOUCH&&!auto&&preview.ok)otext('✓ или тап ещё раз',c.x-CX,c.y-CY-18+6.5/k*1.1,3.8/k*1.1,'#ffe9b0',null,S);
   }
-  for(const n of NPCS){const m=npcMark(n);if(m&&!combat)otext(m,wx(n.x),wy(n.y)-21+Math.sin(time*4)*1.2,8*H/S,'#ffd23a',null,S)}
+  if(curMap==='meadow')for(const n of NPCS){const m=npcMark(n);if(m&&!combat)otext(m,wx(n.x),wy(n.y)-21+Math.sin(time*4)*1.2,8*H/S,'#ffd23a',null,S)}
   for(const t of texts){cx.globalAlpha=Math.min(1,t.life/t.max*2);otext(t.s,wx(t.x),wy(t.y),t.size*H/S*1.1,t.col,null,S)}
   cx.globalAlpha=1;
   if(hintT>0&&running&&!combat){cx.globalAlpha=Math.min(1,hintT);otext(TOUCH?'Тапни по жителю — поговорить, по клетке — идти, по слайму — бой.':'Клик по жителю — поговорить, по клетке — идти, по слайму — бой.',UW/2,UH-14,5.5,'#fff0d0');cx.globalAlpha=1}
@@ -1441,6 +1611,7 @@ function render(){
     otext(TOUCH?'Тап — показать действие, второй тап — сделать. Кнопки справа — меч, лук, огонёк и конец хода.':'Наведи — шанс и цена в ОД, клик — сделать. 1/2/3 — меч/лук/огонёк, пробел — конец хода.',UW/2,UH-30,4.6,'#fff0d0');cx.globalAlpha=1}
   if(banner){cx.globalAlpha=Math.min(1,banner.t*2);otext(banner.s,UW/2,UH*.34,10,'#ffd27a');cx.globalAlpha=1}
   if(P.dead>0)otext('Герой устал…',UW/2,UH/2,11,'#ffe0c0');
+  if(fade){cx.globalAlpha=fade.a;cx.fillStyle='#1b1a24';cx.fillRect(0,0,cv.width,cv.height);cx.globalAlpha=1}
 }
 
 // ---------- loop ----------
