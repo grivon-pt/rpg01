@@ -217,8 +217,10 @@ def auto_vs_stump(pw, srv, errs):
     ov = g.ev("QAOV.ex")
     allwin = all(r[0] for r in runs); picks = sum(r[4] for r in runs)
     roots = sum(r[2] for r in runs); total = sum(r[2] + r[3] for r in runs)
-    R.check('Автобой против пня: побеждает эталоном; бьёт ли пня и срывает ли грибы', 'part' if allwin else False,
-            f'[победа, раундов, ударов по корешкам, по пню, сорвано грибов, перекусов пня] = {runs}; по корешкам {roots}/{total} действий; грибы не срывает: {picks == 0}')
+    # после исправлений (b721f0e) автобой бьёт пня, а не корешки, и срывает ближние грибы
+    ok_ai = picks > 0 and roots <= total * .2
+    R.check('Автобой против пня: побеждает эталоном; бьёт пня и срывает грибы', True if allwin and ok_ai else ('part' if allwin else False),
+            f'[победа, раундов, ударов по корешкам, по пню, сорвано грибов, перекусов пня] = {runs}; по корешкам {roots}/{total} действий; сорвано грибов {picks}; раундов {min(r[1] for r in runs)}–{max(r[1] for r in runs)} (дизайн 6–9)')
     R.check('Надписи над пнём не налезают на «Твой ход»/«Ходит …»/«АВТОБОЙ»', not ov, f'наложения: {ov[:6]} (скриншот /tmp/qa_stump_text_over_autoboy.png)')
     g.close()
 

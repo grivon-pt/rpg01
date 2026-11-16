@@ -493,13 +493,18 @@ def c31_36(pw, srv, errs):
     # 34. журнал и трекер
     tr0 = g.ev("trackerText()")
     g.ev("openPanel('quests');0"); time.sleep(.2); jr = g.ev("$('pinv').innerText"); g.ev("togglePanel(false);0")
-    g.ev("closeDlg();P.q.goo={s:'active',n:0};0"); tr_goo = g.ev("trackerText()"); time.sleep(.3)
-    g.shot('/tmp/qa_tracker_only_first.png'); g.ev("delete P.q.goo;0")
+    # после исправлений: трекер показывает задание текущей карты (в лесу — «Шёпот в чаще»),
+    # иначе первое активное; остальные активные — «+N»
+    g.ev("closeDlg();P.q.goo={s:'active',n:0};0"); tr_goo = g.ev("trackerText()")
+    reset(g, 'forest', 3, 13); tr_goo_forest = g.ev("trackerText()"); time.sleep(.3)
+    g.shot('/tmp/qa_tracker_forest.png')
+    reset(g, 'meadow', 17, 17); g.ev("delete P.q.goo;0"); tr_back = g.ev("trackerText()")
     g.ev("P.flags.stumpDown=1;0"); tr1 = g.ev("trackerText()"); mk = g.ev("npcMark(NPCS[0])")
-    R.check('34. Задание в журнале и под полосками: «• Шёпот в чаще 0/1» → «✔ … 1/1», над Ефимом «?»',
-            'part' if (tr0 == '• Шёпот в чаще 0/1' and 'Шёпот в чаще' in jr and tr1 == '✔ Шёпот в чаще 1/1' and mk == '?' and 'Шёпот' not in tr_goo) else
-            (tr0 == '• Шёпот в чаще 0/1' and tr1 == '✔ Шёпот в чаще 1/1' and mk == '?'),
-            f'трекер «{tr0}» → «{tr1}», знак «{mk}», в журнале={"Шёпот в чаще" in jr}; но при активной «Слизи для зелий» трекер показывает «{tr_goo}» — «Шёпот в чаще» не виден')
+    R.check('34. Задание в журнале и под полосками: «• Шёпот в чаще 0/1» → «✔ … 1/1», над Ефимом «?»; в лесу трекер показывает его, иначе первое активное с «+N»',
+            tr0 == '• Шёпот в чаще 0/1' and 'Шёпот в чаще' in jr and tr1 == '✔ Шёпот в чаще 1/1' and mk == '?'
+            and tr_goo == '• Слизь для зелий 0/5 +1' and tr_goo_forest == '• Шёпот в чаще 0/1 +1' and tr_back == tr0,
+            f'трекер «{tr0}» → «{tr1}», знак «{mk}», в журнале={"Шёпот в чаще" in jr}; '
+            f'со «Слизью для зелий»: на лугу «{tr_goo}», в лесу «{tr_goo_forest}» (скриншот /tmp/qa_tracker_forest.png)')
     # 33. награда
     c0, x0 = g.ev("[P.coins,P.xp+P.lvl*1000]")
     b0 = g.ev("[bagCount('pot_hp'),bagCount('forest_mush')]")
@@ -539,29 +544,36 @@ def c37_40(pw, srv, errs):
     g.ev("openPanel('inv');0"); time.sleep(.2)
     g.ev("[...document.querySelectorAll('#pinv [data-use]')].find(b=>P.bag[+b.dataset.use].id==='forest_mush').click();0"); time.sleep(.2)
     after = g.ev("[P.ap,P.hp,P.mp,bagCount('forest_mush'),Math.round(D.maxHp()*.25),Math.round(D.maxMp()*.15)]")
-    g.ev("togglePanel(false);endCombat(true);0")
+    # Бой закрываем в одном вызове вместе с уборкой грибовика и передышкой: иначе живой грибовик в 2 клетках
+    # при P.grace=0 на следующем кадре снова начинает бой, тот «переезжает» на луг, и Гордей отвечает
+    # «Не до разговоров!» (так п. 38 падал примерно в 1 прогоне из 6).
+    g.ev("togglePanel(false);for(const e of enemies)e.hp=0;endCombat(true);enemies.length=0;P.grace=1e9;0")
     use_ok = before[0] - after[0] == 2 and after[1] - before[1] == after[4] and after[2] - before[2] == after[5] and after[3] == before[3] - 1
     # магазины
-    g.ev("setMap('meadow');P.st.cha=6;P.flags.discount=0;0")
+    reset(g, 'meadow', 12, 10); g.ev("P.st.cha=6;P.flags.discount=0;0")
     mira = g.ev("[STOCK.mira.some(s=>s[0]==='forest_mush'),buyPrice('forest_mush','mira'),[1,5,6,10].map(c=>{const o=P.st.cha;P.st.cha=c;const p=buyPrice('forest_mush','mira');P.st.cha=o;return p})]")
     g.ev("openShop('mira');0"); time.sleep(.2); mira_ui = 'Лесной гриб' in g.ev("$('pinv').innerText"); g.ev("togglePanel(false);0")
     g.ev("openShop('boris');0"); time.sleep(.2)
     c0 = g.ev("P.coins"); sp = g.ev("sellPrice('forest_mush')")
     g.ev("[...document.querySelectorAll('#pinv [data-sell]')].find(b=>P.bag[+b.dataset.sell].id==='forest_mush').click();0"); time.sleep(.1)
-    sold = g.ev("P.coins") - c0; exp_sell = g.ev("Math.floor(10*sellMul())"); g.ev("togglePanel(false);0")
+    sold = g.ev("P.coins") - c0; g.ev("togglePanel(false);0")
+    # цену считаем от VAL в игре (после исправлений VAL гриба намеренно 13), а не от константы
+    val, mul_s, exp_sell, exp_buy = g.ev("[VAL.forest_mush,sellMul(),Math.max(1,Math.floor(VAL.forest_mush*sellMul())),Math.max(1,Math.round(VAL.forest_mush*buyMul('mira')))]")
     R.check('37. Лесной гриб: 2 ОД, 25% ХП и 15% маны; у Миры продаётся, Борис покупает за VAL×множитель',
-            use_ok and mira[0] and mira_ui and sold == exp_sell,
-            f'в бою [ОД,ХП,мана,грибы] {before[:4]} → {after[:4]}; у Миры есть={mira[0]}, цена при О6 {mira[1]} (при О1/5/6/10: {mira[2]}; дизайн ждёт «~10–14»); Борис дал {sold} (10×{g.ev("sellMul()"):.2f}={exp_sell})')
+            use_ok and mira[0] and mira_ui and sold == exp_sell and mira[1] == exp_buy,
+            f'в бою [ОД,ХП,мана,грибы] {before[:4]} → {after[:4]}; у Миры есть={mira[0]}, цена при О6 {mira[1]} (ожидалось {exp_buy}; при О1/5/6/10: {mira[2]}); Борис дал {sold} ({val}×{mul_s:.2f}={exp_sell})')
     # 38. лук и броня
     g.ev("addItem('bow_ash',1,true);addItem('bark_armor',1,true);P.eq.bow='bow_ash';P.eq.armor='bark_armor';P.eq.trinket=null;P.st.per=6;P.up={};0")
     bow = g.ev("[D.bow(),D.bowAp(),D.bowRange(),D.armorAc(),D.def()-Math.floor(stv('end')/2)]")
     g.ev("P.coins=1000;addItem('goo',20,true);talk(NPCS[2]);0")
+    pre = g.ev("[!!combat,!!dlgNpc]")  # если бой не закрылся, Гордей не говорит — покажем это в итоге
     ups = [o[0] for o in g.dlg()[1]]
     g.opt('Улучшить лук'); g.opt('Спасибо'); g.opt('Улучшить броню'); g.opt('Спасибо'); g.ev("closeDlg();0")
     up = g.ev("[P.up.bow_ash||0,P.up.bark_armor||0,getIt('bow_ash').dmg,getIt('bark_armor').ac,getIt('bark_armor').def]")
     R.check('38. Ясеневый лук 9–13+В, 4 ОД, дальность 8+⌊В/3⌋; Кора-доспех КБ+7/защ.+3; оба улучшаются у Гордея',
             bow == [[15, 19], 4, 10, 7, 3] and up[:2] == [1, 1] and up[2] == [11, 15] and up[3:] == [8, 4],
-            f'лук [урон,ОД,дальность] {bow[:3]} при В6, броня КБ {bow[3]} защита +{bow[4]}; у Гордея {up}')
+            f'лук [урон,ОД,дальность] {bow[:3]} при В6, броня КБ {bow[3]} защита +{bow[4]}; у Гордея {up}'
+            + ('' if pre == [False, True] else f'; перед разговором бой={pre[0]}, диалог открыт={pre[1]}'))
     # 39. сердце леса
     g.ev("P.eq.trinket=null;P.st.per=5;P.st.end=5;0")
     h0 = g.ev("[D.maxHp(),stv('per'),stv('end')]")
