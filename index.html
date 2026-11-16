@@ -155,8 +155,8 @@ const cv=document.getElementById('c'),cx=cv.getContext('2d');
 const TOUCH=matchMedia('(pointer:coarse)').matches||('ontouchstart' in window);
 if(!TOUCH)document.body.classList.add('desk');
 document.getElementById('help').innerHTML=TOUCH
- ?'<p>Тап по клетке — идти, по слайму — напасть, по жителю — поговорить</p><p>В бою: тап — показать действие, второй тап — сделать</p><p>⚔ / 🏹 / ✦ — меч, лук или огонёк, ⏭ — конец хода</p><p>📜 — задания, 🎒 — инвентарь, 👤 — герой, 🔍 — масштаб, ⟳ авто — автобой</p>'
- :'<p>Клик по клетке — идти, по слайму — напасть, по жителю — поговорить; WASD — шаг</p><p>В бою: наведи — шанс и цена в ОД, клик — сделать</p><p>1 / 2 / 3 — меч, лук, огонёк; пробел — конец хода</p><p>P — задания, I — инвентарь, C — герой, Q — автобой</p>';
+ ?'<p>Тап по клетке — идти, по врагу — напасть, по жителю — поговорить</p><p>В бою: тап — показать действие, второй тап — сделать</p><p>⚔ / 🏹 / ✦ — меч, лук или огонёк, ⏭ — конец хода</p><p>📜 — задания, 🎒 — инвентарь, 👤 — герой, 🔍 — масштаб, ⟳ авто — автобой</p>'
+ :'<p>Клик по клетке — идти, по врагу — напасть, по жителю — поговорить; WASD — шаг</p><p>В бою: наведи — шанс и цена в ОД, клик — сделать</p><p>1 / 2 / 3 — меч, лук, огонёк; пробел — конец хода</p><p>P — задания, I — инвентарь, C — герой, Q — автобой</p>';
 // The canvas is full device resolution; the pixel-art world is drawn scaled by S.
 // Positions are snapped to 1/S of an art pixel, so movement is smooth, not 1-art-pixel jumps.
 let VW=320,VH=180,S=1,H=1,UW=320,UH=180;
@@ -286,8 +286,9 @@ function prerenderMap(){
       for(let i=0;i<4;i++)R(px+(rnd()*15|0),py+(rnd()*15|0),1,1,'#d1b675');
     }else if(t===MOSS||t===FERN||t===MUSH||t===STUMP){
       if(t===MUSH)ground(x,y,px,py);else moss(px,py);
-      if(t===FERN)for(let k=0;k<2;k++){const fx=px+3+k*7+(rnd()*3|0),fy=py+4+(rnd()*4|0);R(fx,fy,1,5,'#2f6a2c');
-        for(let j=0;j<5;j+=2){R(fx-1,fy+j,1,1,'#5aa848');R(fx+1,fy+j,1,1,'#5aa848')}}
+      if(t===FERN)for(let k=0;k<2;k++){const fx=px+3+k*7+(rnd()*3|0),fy=py+3+(rnd()*3|0);R(fx,fy,1,9,'#2a5a26');
+        for(let j=1;j<9;j+=2){const w=j<3?1:j<7?3:2;R(fx-w,fy+j,w,1,'#6fc055');R(fx+1,fy+j,w,1,'#6fc055')}
+        R(fx,fy-1,1,1,'#8fd86a');R(fx-1,fy+3,1,1,'#8fd86a');R(fx+3,fy+5,1,1,'#8fd86a')}
       if(t===MUSH)for(let k=0;k<2;k++){const mx=px+2+k*7+(rnd()*4|0),my=py+4+(rnd()*6|0),c=['#d94a3a','#e8e0d0','#b0703a'][rnd()*3|0];
         R(mx+1,my+2,1,2,'#f0e0c0');R(mx,my,3,2,c);if(c==='#d94a3a')R(mx+1,my,1,1,'#fff3e0')}
       if(t===STUMP){R(px+4,py+8,8,6,'#6b4a2a');R(px+4,py+8,1,6,'#4a3018');R(px+4,py+6,8,3,'#c8a070');R(px+6,py+7,4,1,'#a87e4e');R(px+4,py+6,3,1,'#5aa23b')}
@@ -343,7 +344,7 @@ const SP=[
   ['S','str','Сила','урон и точность мечом, переносимый вес'],
   ['P','per','Восприятие','очерёдность, урон и дальность лука, меткость огонька'],
   ['E','end','Выносливость','здоровье, защита, восстановление'],
-  ['C','cha','Обаяние','слаймы замечают позже, больше монет'],
+  ['C','cha','Обаяние','враги замечают позже, больше монет'],
   ['I','int','Интеллект','мана, сила и меткость огонька, опыт'],
   ['A','agi','Ловкость','очки действия, точность мечом и луком, класс брони'],
   ['L','luck','Удача','шанс крита и добыча'],
@@ -356,7 +357,7 @@ const PERKS=[
   {id:'thick',n:'Толстокожий',d:'+3 к защите',req:{end:6}},
   {id:'life',n:'Жажда жизни',d:'сердечки лечат вдвое больше',req:{end:4}},
   {id:'charm',n:'Душа компании',d:'+50% монет',req:{cha:6}},
-  {id:'peace',n:'Миротворец',d:'слаймы замечают тебя вдвое ближе',req:{cha:4}},
+  {id:'peace',n:'Миротворец',d:'враги замечают тебя вдвое ближе',req:{cha:4}},
   {id:'mage',n:'Ученик мага',d:'огонёк дешевле на 2 маны и сильнее на 20%',req:{int:6}},
   {id:'learner',n:'Прилежный ученик',d:'+15% опыта',req:{int:4}},
   {id:'swift',n:'Быстрые руки',d:'удар в ближнем бою стоит на 1 ОД меньше',req:{agi:6}},
@@ -859,6 +860,7 @@ function autoPick(){
   if(P.hp<D.maxHp()*.35&&P.ap>=2){const id=bagCount('pot_hp')?'pot_hp':bagCount('forest_mush')?'forest_mush':null;
     if(id)return{kind:'use',id,ok:true,cost:2,cell:[P.gx,P.gy]}}
   const keep=mode,tryM=(m,e)=>{mode=m;const pv=makePreview(e.gx,e.gy);mode=keep;return pv};
+  const boss=foes.find(e=>e.boss);if(boss){const pv=autoBoss(boss,tryM);if(pv)return pv}
   const near=foes.slice().sort((a,b)=>distE(P,a)-distE(P,b)||a.hp-b.hp);
   const adj=near.filter(e=>distE(P,e)<=1).sort((a,b)=>a.hp-b.hp);
   if(adj.length){const pv=tryM('melee',adj[0]);if(pv&&pv.ok)return pv}
@@ -870,6 +872,21 @@ function autoPick(){
   if(adj.length){for(const m of['bow','spell']){const pv=tryM(m,adj[0]);if(pv&&pv.ok)return pv}return null}
   const t=near[0],path=findPath(P.gx,P.gy,(a,b)=>cheb(a,b,t.gx,t.gy)<=1&&!unitAt(a,b,P),(a,b)=>!!unitAt(a,b,P));
   if(path&&path.length){const st=path.slice(0,P.ap);return{kind:'move',path:st,cost:st.length,ok:true,cell:st[st.length-1]}}
+  return null;
+}
+// against the stump: pick a lair mushroom close by when he could eat it, otherwise hit the stump;
+// roots only when the stump cannot be reached (the usual choice below)
+function autoBoss(b,tryM){
+  if(P.ap>=2){let best=null;
+    for(const m of MAPS.forest.shrooms){if(!m.alive||cheb(P.gx,P.gy,m.x,m.y)>2)continue;
+      if(!(b.hp<b.max||cheb(m.x,m.y,b.gx,b.gy)<=4))continue;
+      const pv=makePreview(m.x,m.y);if(pv&&pv.ok&&pv.kind==='pick'&&(!best||pv.cost<best.cost))best=pv}
+    if(best)return best}
+  const me=tryM('melee',b);if(me&&me.ok)return me;
+  for(const k of['bow','spell']){const pv=tryM(k,b);if(pv&&pv.ok&&pv.chance>=25)return pv}
+  // not enough AP to reach him this turn: walk closer, unless roots stand next to the hero
+  const adjRoot=combat.list.some(e=>e.hp>0&&e.type==='root'&&distE(P,e)<=1);
+  if(!adjRoot&&me&&me.path&&me.path.length&&P.ap>0){const st=me.path.slice(0,P.ap);return{kind:'move',path:st,cost:st.length,ok:true,cell:st[st.length-1]}}
   return null;
 }
 async function autoTurn(){
@@ -1025,6 +1042,33 @@ function populate(){
   if(typeof spawnForestFoe==='function'&&!enemies.some(e=>!e.boss&&!e.still))for(let i=0;i<4;i++)spawnForestFoe();
   if(typeof spawnStump==='function'&&!P.flags.stumpDown&&!enemies.some(e=>e.boss))spawnStump();
 }
+// in a fight the camera may go past the map edge (dark background there), so targets near the edge
+// are not left under the buttons on the right and at the bottom
+function camClamp(x,y){
+  if(combat)return[clamp(x,-VW*.35,MW*T-VW*.6),clamp(y,-VH*.3,MH*T-VH*.7)];
+  return[Math.max(0,Math.min(MW*T-VW,x)),Math.max(0,Math.min(MH*T-VH,y))];
+}
+// screen point (share of the view) the fight is centred on: left of the button column
+const FREE_CX=.39,FREE_CY=.5;
+// the camera stays put while everything that matters is inside the free zone; otherwise it moves to frame it
+function combatCam(){
+  const a=combat.active&&combat.active!==P?combat.active:P;
+  const pts=[[P.x,P.y-8]];for(const e of combat.list)if(e.hp>0)pts.push([e.x,e.y-8]);
+  const inside=([x,y])=>x>camX+VW*.06&&x<camX+VW*.72&&y>camY+VH*.14&&y<camY+VH*.78;
+  if(curMap==='forest'&&combat.list.some(e=>e.boss&&e.hp>0)){
+    for(const m of MAPS.forest.shrooms)if(m.alive){const p=cellPx(m.x,m.y);pts.push([p.x,p.y-8])}
+    const c=cellPx(LAIR[0],LAIR[1]);pts.push([c.x,c.y-8])}
+  let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;for(const[x,y]of pts){x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y)}
+  // fits into the free part of the screen (≈ 3/4 of the width, 3/4 of the height) — frame everything
+  const out=!pts.every(inside);
+  if(out||combat.camGoal){
+    // per axis: frame everything if it fits, otherwise follow whoever is acting
+    const g=[(x1-x0<=VW*.62?(x0+x1)/2:a.x)-VW*FREE_CX,(y1-y0<=VH*.6?(y0+y1)/2:a.y-8)-VH*FREE_CY];
+    if(out)combat.camGoal=camClamp(g[0],g[1]);
+    const G=combat.camGoal;if(Math.hypot(G[0]-camX,G[1]-camY)<.5){combat.camGoal=null;return null}
+    return G}
+  return null;
+}
 function snapCam(){camX=Math.max(0,Math.min(MW*T-VW,P.x-VW/2));camY=Math.max(0,Math.min(MH*T-VH,P.y-8-VH/2))}
 async function switchMap(ex){
   if(busy||combat||P.dead>0)return;
@@ -1074,7 +1118,7 @@ function stumpCheckLair(){
   if(combat){if(!e.inCombat){e.inCombat=true;combat.list.push(e)}}else{P.path=[];startCombat(false,e)}
 }
 function wakeStump(e){
-  e.asleep=false;banner={s:'Древний пень проснулся!',t:2};shake=.2;snd(110,70,.5,'sawtooth',.06);
+  e.asleep=false;sayLater(.6,()=>{banner={s:'Древний пень проснулся!',t:2}});shake=.2;snd(110,70,.5,'sawtooth',.06);
   ftext(e.x,e.y-30,'Кто топчет мой мох?! Я спал сто лет!','#ffd27a',4.6,2.5);
 }
 function removeRoots(){for(const r of enemies)if(r.type==='root'&&r.hp>0){r.hp=0;burst(r.x,r.y-4,'#7a4a26',8,40)}}
@@ -1198,11 +1242,11 @@ function update(dt){
   else if(!combat){
     P.mp=Math.min(D.maxMp(),P.mp+D.mpRegen()*dt);P.calm+=dt;if(P.calm>3)P.hp=Math.min(D.maxHp(),P.hp+D.hpRegen()*dt);
   }
-  // camera follows the hero, or the slime whose turn it is
-  const foc=combat&&combat.active&&combat.active!==P?combat.active:P;
+  // camera follows the hero; in a fight it frames the whole fight in the part of the screen free of buttons
   const k=1-Math.exp(-dt*7);
-  camX+=(foc.x-VW/2-camX)*k;camY+=(foc.y-8-VH/2-camY)*k;
-  camX=Math.max(0,Math.min(MW*T-VW,camX));camY=Math.max(0,Math.min(MH*T-VH,camY));
+  if(combat){const g=combatCam();if(g){camX+=(g[0]-camX)*k;camY+=(g[1]-camY)*k}}
+  else{camX+=(P.x-VW/2-camX)*k;camY+=(P.y-8-VH/2-camY)*k}
+  [camX,camY]=camClamp(camX,camY);
   for(const n of NPCS){if(dlgNpc===n)continue;const d=cheb(n.gx,n.gy,P.gx,P.gy);n.dir=d<=3?faceDir(P.gx-n.gx,P.gy-n.gy):'down'}
   if(CAT.follow){const dx=P.x-CAT.x,dy=P.y-CAT.y,d=Math.hypot(dx,dy);CAT.face=dx<0?-1:1;if(d>14){const sp=Math.min(d,(40+d*3)*dt);CAT.x+=dx/d*sp;CAT.y+=dy/d*sp}
     CAT.gx=Math.floor(CAT.x/T);CAT.gy=Math.floor(CAT.y/T)}
@@ -1243,7 +1287,7 @@ function update(dt){
   forestTick(dt);
   for(const p of parts){p.x+=p.vx*dt;p.y+=p.vy*dt;if(!p.nog)p.vy+=120*dt;p.vx*=.96;p.life-=dt}
   parts=parts.filter(p=>p.life>0);
-  for(const t of texts){t.y-=16*dt;t.life-=dt}
+  for(const t of texts){t.y-=16*dt;t.life-=dt;if(combat){const minY=CY+41*H/S;if(t.y<minY)t.y=minY}}
   texts=texts.filter(t=>t.life>0);
   updButtons();
 }
@@ -1262,13 +1306,13 @@ const QUESTS={
   slimes:{n:'Слаймы на лугу',giver:'efim',goal:5,d:'Прогони 5 слаймов с луга к востоку и вернись к Ефиму.',rw:{coins:30,xp:20}},
   blues:{n:'Синяя напасть',giver:'efim',goal:3,d:'Победи 3 синих слайма и вернись к Ефиму.',rw:{coins:50,xp:40,items:[['pot_hp',2]]}},
   goo:{n:'Слизь для зелий',giver:'mira',goal:5,d:'Принеси Мире 5 слизи.',rw:{xp:25,items:[['pot_hp',2],['pot_mp',1]]}},
-  cat:{n:'Где Пушок?',giver:'anya',goal:1,d:'Найди кота Ани в лесу на востоке и приведи домой.',rw:{coins:40,xp:30,items:[['amulet_luck',1]]}},
+  cat:{n:'Где Пушок?',giver:'anya',goal:1,d:'Найди кота Ани на восточном краю луга, у опушки, и приведи домой.',rw:{coins:40,xp:30,items:[['amulet_luck',1]]}},
   stump:{n:'Шёпот в чаще',giver:'efim',goal:1,
     d:'Успокой Древний пень на дальней поляне Шепчущего леса: по дороге на восток, через мостик и на юго-восток. Потом вернись к Ефиму.',
     rw:{coins:100,xp:80,items:[['pot_hp',2],['forest_mush',2]]}},
 };
 const VAL={arrows:1,pot_hp:15,pot_mp:15,dagger:25,sword_wood:5,sword_iron:60,bow_short:12,bow_long:70,jacket:8,leather:45,chain:110,amulet_luck:80,ring_agi:80,charm_int:80,goo:4,
-  forest_mush:10,bow_ash:95,bark_armor:75,heart_forest:150};
+  forest_mush:13,bow_ash:95,bark_armor:75,heart_forest:150};
 const STOCK={boris:[['arrows',5],['pot_hp',1],['pot_mp',1],['dagger',1],['sword_iron',1],['bow_long',1],['leather',1],['chain',1]],mira:[['pot_hp',1],['pot_mp',1],['forest_mush',1]]};
 const buyMul=v=>clamp(1.4-stv('cha')*.05,.8,1.4)*(P.flags.discount?.9:1)*(v==='mira'?.8:1);
 const sellMul=()=>clamp(.25+stv('cha')*.03,.25,.6);
@@ -1408,7 +1452,7 @@ function miraRoot(){
 }
 function anyaRoot(){
   const o=[];
-  if(qAvail('cat'))o.push(['Что случилось?',()=>({t:'Мой котик Пушок убежал в лес на востоке! Он серенький и пушистый… Найдёшь его?',o:[['Конечно найду',()=>{startQuest('cat');return{t:'Спасибо! Он откликается на «кис-кис».',o:[bye]}}],['Позже',()=>anyaRoot()]]})]);
+  if(qAvail('cat'))o.push(['Что случилось?',()=>({t:'Мой котик Пушок убежал на восточный край луга, к самой опушке! Он серенький и пушистый… Найдёшь его?',o:[['Конечно найду',()=>{startQuest('cat');return{t:'Спасибо! Он откликается на «кис-кис».',o:[bye]}}],['Позже',()=>anyaRoot()]]})]);
   if(qState('cat')==='done')o.push(['Как Пушок?',()=>({t:'Спит у костра и мурчит. Спасибо тебе!',o:[bye]})]);
   o.push(bye);
   return{t:qState('cat')==='none'?'Ой… *всхлипывает*':'Привет!',o:questOpts('anya',o)};
@@ -1460,7 +1504,13 @@ function renderQuests(){
   $('pinv').innerHTML='<h4 style="color:#c99a4a;font-size:13px;letter-spacing:1px">АКТИВНЫЕ</h4>'+(act.join('')||'<small style="opacity:.6">Нет. Поговори с жителями деревни.</small>')+
     (done.length?'<h4 style="color:#c99a4a;font-size:13px;letter-spacing:1px;margin-top:12px">ВЫПОЛНЕННЫЕ</h4>'+done.join(''):'');
 }
-function trackerText(){for(const id in QUESTS)if(qState(id)==='active'){const Q=QUESTS[id];return(qReady(id)?'✔ ':'• ')+Q.n+' '+qProg(id)+'/'+Q.goal}return''}
+// the quest of the current map first (the forest — «Шёпот в чаще»), else the first active; «+N» for the rest
+const QUEST_MAP={stump:'forest'};
+function trackerText(){
+  const act=Object.keys(QUESTS).filter(id=>qState(id)==='active');if(!act.length)return'';
+  const id=act.find(i=>QUEST_MAP[i]===curMap)||act[0],Q=QUESTS[id];
+  return(qReady(id)?'✔ ':'• ')+Q.n+' '+qProg(id)+'/'+Q.goal+(act.length>1?' +'+(act.length-1):'');
+}
 
 // ---------- character panel (creation + hero screen) ----------
 const panel=document.getElementById('panel');let pmode='hero';
@@ -1509,7 +1559,7 @@ function renderPanel(){
     ['Владение магией',D.magicSkill()+'%'],['Урон огонька · ОД',rngTxt(D.spell())+' · '+D.spellAp()],['Дальность огонька',D.range()+' кл.'],
     ['Шанс крита',pct(D.crit())+' (×'+D.critMul()+')'],['Переносимый вес',D.carry()],
     ['Мана / здоровье',D.mpRegen().toFixed(1)+' / '+D.hpRegen().toFixed(1)+' в сек.'],
-    ['Слаймы замечают с',D.aggro()+' кл.'],['Монеты · опыт','×'+D.coinMul().toFixed(2)+' · ×'+D.xpMul().toFixed(2)],['Шанс зелья',pct(D.dropCh())]
+    ['Враги замечают с',D.aggro()+' кл.'],['Монеты · опыт','×'+D.coinMul().toFixed(2)+' · ×'+D.xpMul().toFixed(2)],['Шанс зелья',pct(D.dropCh())]
 ].map(([a,b])=>'<div><span>'+a+'</span><span>'+b+'</span></div>').join('');
   let ph='',ch='';
   if(!create){
@@ -1553,7 +1603,7 @@ function renderInv(){
     eq+=it?'<div class="it"><img src="'+ICON[id].url+'"><div class="tx"><span class="slot">'+name+'</span><b>'+it.n+'</b><small>'+itemStats(it)+'</small></div><div class="ac"><button class="alt" data-un="'+slot+'">Снять</button></div></div>'
       :'<div class="it empty"><div class="tx"><span class="slot">'+name+'</span><b>пусто</b></div></div>'}
   let bag='<h4>Сумка</h4>';
-  if(!P.bag.length)bag+='<small style="opacity:.6">Пусто. Ищи сундуки и добычу со слаймов.</small>';
+  if(!P.bag.length)bag+='<small style="opacity:.6">Пусто. Ищи сундуки и добычу с врагов.</small>';
   P.bag.forEach((b,i)=>{const it=ITEMS[b.id];let act='';
     if(['melee','bow','armor','trinket'].includes(it.type))act+='<button data-eq="'+i+'">Надеть</button>';
     if(it.type==='use')act+='<button data-use="'+i+'">'+(it.icon==='mush'?'Съесть':'Выпить')+'</button>';
@@ -1828,7 +1878,7 @@ function drawAP(){
 
 function render(){
   let shx=0,shy=0;if(shake>0&&!paused){shx=(Math.random()-.5)*4;shy=(Math.random()-.5)*4}
-  CX=q(Math.max(0,Math.min(MW*T-VW,camX+shx)));CY=q(Math.max(0,Math.min(MH*T-VH,camY+shy)));
+  {const[a,b]=camClamp(camX+shx,camY+shy);CX=q(a);CY=q(b)}
   cx.setTransform(1,0,0,1,0,0);cx.imageSmoothingEnabled=false;
   cx.fillStyle='#1b1a24';cx.fillRect(0,0,cv.width,cv.height);
   cx.setTransform(S,0,0,S,0,0);
@@ -1883,7 +1933,7 @@ function render(){
   if(curMap==='meadow')for(const n of NPCS){const m=npcMark(n);if(m&&!combat)otext(m,wx(n.x),wy(n.y)-21+Math.sin(time*4)*1.2,8*H/S,'#ffd23a',null,S)}
   for(const t of texts){cx.globalAlpha=Math.min(1,t.life/t.max*2);otext(t.s,wx(t.x),wy(t.y),t.size*H/S*1.1,t.col,null,S)}
   cx.globalAlpha=1;
-  if(hintT>0&&running&&!combat){cx.globalAlpha=Math.min(1,hintT);otext(TOUCH?'Тапни по жителю — поговорить, по клетке — идти, по слайму — бой.':'Клик по жителю — поговорить, по клетке — идти, по слайму — бой.',UW/2,UH-14,5.5,'#fff0d0');cx.globalAlpha=1}
+  if(hintT>0&&running&&!combat){cx.globalAlpha=Math.min(1,hintT);otext(TOUCH?'Тапни по жителю — поговорить, по клетке — идти, по врагу — бой.':'Клик по жителю — поговорить, по клетке — идти, по врагу — бой.',UW/2,UH-14,5.5,'#fff0d0');cx.globalAlpha=1}
   if(combatTip>0&&combat){cx.globalAlpha=Math.min(1,combatTip);
     otext(TOUCH?'Тап — показать действие, второй тап — сделать. Кнопки справа — меч, лук, огонёк и конец хода.':'Наведи — шанс и цена в ОД, клик — сделать. 1/2/3 — меч/лук/огонёк, пробел — конец хода.',UW/2,UH-30,4.6,'#fff0d0');cx.globalAlpha=1}
   if(banner){cx.globalAlpha=Math.min(1,banner.t*2);otext(banner.s,UW/2,UH*.34,10,'#ffd27a');cx.globalAlpha=1}
