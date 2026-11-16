@@ -1263,6 +1263,9 @@ const QUESTS={
   blues:{n:'Синяя напасть',giver:'efim',goal:3,d:'Победи 3 синих слайма и вернись к Ефиму.',rw:{coins:50,xp:40,items:[['pot_hp',2]]}},
   goo:{n:'Слизь для зелий',giver:'mira',goal:5,d:'Принеси Мире 5 слизи.',rw:{xp:25,items:[['pot_hp',2],['pot_mp',1]]}},
   cat:{n:'Где Пушок?',giver:'anya',goal:1,d:'Найди кота Ани в лесу на востоке и приведи домой.',rw:{coins:40,xp:30,items:[['amulet_luck',1]]}},
+  stump:{n:'Шёпот в чаще',giver:'efim',goal:1,
+    d:'Успокой Древний пень на дальней поляне Шепчущего леса: по дороге на восток, через мостик и на юго-восток. Потом вернись к Ефиму.',
+    rw:{coins:100,xp:80,items:[['pot_hp',2],['forest_mush',2]]}},
 };
 const VAL={arrows:1,pot_hp:15,pot_mp:15,dagger:25,sword_wood:5,sword_iron:60,bow_short:12,bow_long:70,jacket:8,leather:45,chain:110,amulet_luck:80,ring_agi:80,charm_int:80,goo:4,
   forest_mush:10,bow_ash:95,bark_armor:75,heart_forest:150};
@@ -1278,14 +1281,15 @@ function placeCat(){let[x,y]=[41,13];const ok=(a,b)=>walkable(a,b)&&!(at(a,b)===
 function catHome(){CAT.follow=false;CAT.home=true;CAT.gx=9;CAT.gy=9;const p=cellPx(9,9);CAT.x=p.x+3;CAT.y=p.y}
 
 function qState(id){return P.q[id]?P.q[id].s:'none'}
-function qProg(id){const q=P.q[id];if(!q)return 0;if(id==='goo')return Math.min(QUESTS.goo.goal,bagCount('goo'));if(id==='cat')return CAT.follow?1:0;return Math.min(QUESTS[id].goal,q.n||0)}
+function qProg(id){const q=P.q[id];if(!q)return 0;if(id==='stump')return P.flags.stumpDown?1:0;if(id==='goo')return Math.min(QUESTS.goo.goal,bagCount('goo'));if(id==='cat')return CAT.follow?1:0;return Math.min(QUESTS[id].goal,q.n||0)}
 const qReady=id=>qState(id)==='active'&&qProg(id)>=QUESTS[id].goal;
-function qAvail(id){return qState(id)==='none'&&(id!=='blues'||qState('slimes')==='done')}
+function qAvail(id){return qState(id)==='none'&&(id!=='blues'||qState('slimes')==='done')&&(id!=='stump'||qState('blues')==='done')}
 function startQuest(id){P.q[id]={s:'active',n:0};banner={s:'Новое задание: '+QUESTS[id].n,t:2.4};snd(523,784,.2,'triangle',.05);save()}
 function finishQuest(id){const Q=QUESTS[id];P.q[id].s='done';
   if(id==='goo')takeItem('goo',Q.goal);
   if(id==='cat')catHome();
-  const rw=Q.rw;if(rw.coins){P.coins+=rw.coins;ftext(P.x,P.y-30,'+'+rw.coins+' монет','#ffd94a',5,1.6)}
+  const rw=Q.rw,coins=(rw.coins||0)+(id==='stump'&&P.flags.efimStumpAdv?30:0);
+  if(coins){P.coins+=coins;ftext(P.x,P.y-30,'+'+coins+' монет','#ffd94a',5,1.6)}
   if(rw.items)for(const[it,q]of rw.items)addItem(it,q);
   banner={s:'Задание выполнено: '+Q.n,t:2.4};snd(523,1046,.3,'triangle',.06);
   if(rw.xp)gainXp(rw.xp);save()}
@@ -1335,7 +1339,8 @@ function questOpts(giver,o){
 }
 const rootOf=g=>({efim:efimRoot,boris:borisRoot,gordey:gordeyRoot,mira:miraRoot,anya:anyaRoot})[g];
 function doneLine(id){return{slimes:'Вот это да! Луг снова наш. Держи награду, заслужил.',blues:'Синие — злющие, а ты справился. Деревня у тебя в долгу!',
-  goo:'Чудесная слизь, свежая! Вот, возьми зелья — сама варила.',cat:'Пушок! Ты нашёлся! Спасибо-спасибо! Вот, возьми мой амулет — он приносит удачу.'}[id]}
+  goo:'Чудесная слизь, свежая! Вот, возьми зелья — сама варила.',
+  stump:'Лес снова шепчет только листьями — я ночью сам выходил слушать. Спасибо тебе, путник! Вот, держи награду.',cat:'Пушок! Ты нашёлся! Спасибо-спасибо! Вот, возьми мой амулет — он приносит удачу.'}[id]}
 
 function efimRoot(){
   const o=[];
@@ -1344,10 +1349,24 @@ function efimRoot(){
     ['Работа опасная — может, аванс?',()=>{startQuest('slimes');P.coins+=10;P.flags.efimAdv=1;ftext(P.x,P.y-24,'+10 монет','#ffd94a',5,1.4);return{t:'Хе, умеешь ты просить. Держи 10 монет вперёд.',o:[bye]}},{stat:'cha',min:6}],
     ['Не сейчас',()=>efimRoot()]]})]);
   if(qAvail('blues'))o.push(['Ещё работа найдётся?',()=>({t:'Синие слаймы приходят из леса. Одолей троих — получишь 50 монет и зелья.',o:[['Сделаю',()=>{startQuest('blues');return{t:'Удачи, герой!',o:[bye]}}],['Позже',()=>efimRoot()]]})]);
+  if(qAvail('stump'))o.push(['Что слышно в округе?',efimStump]);
+  if(qState('stump')==='done'&&!P.flags.efimFog)o.push(['Пень сказал, что его разбудил туман с башни.',()=>{P.flags.efimFog=1;gainXp(20);
+    return{t:'Туман, говоришь… С башни мага? Значит, и до нас доползёт, дай срок. Ну, путник, похоже, впереди у тебя дорога подлиннее нашего леса.',o:[['Похоже на то',()=>efimRoot()]]}},{stat:'int',min:7}]);
   o.push(['Расскажи о деревне',()=>({t:'Тёплый Ручей — тихое место. Борис торгует, Гордей кует, Мира лечит травами. А на востоке, за лесом, стоит старая башня мага… Говорят, оттуда и ползёт туман.',o:[
     ['Что за туман?',()=>({t:'Не знаю, путник. Маг давно пропал. Может, ты однажды узнаешь.',o:[['Ясно',()=>efimRoot()]]})],['Спасибо',()=>efimRoot()]]})]);
   o.push(bye);
   return{t:'Здравствуй, путник! Я Ефим, староста Тёплого Ручья. Чем могу помочь?',o:questOpts('efim',o)};
+}
+// «Шёпот в чаще»: the forest quest
+function efimStump(){
+  const go=()=>{startQuest('stump');return{t:'Вот спасибо. Только не обижай старика зря — он лесу хозяин, ему просто спать пора. Иди по дороге на восток, за мостик через ручей, а там на юго-восток, к поляне в кольце деревьев. И грибов набери в дорогу — лесные грибы силы прибавляют.',o:[bye]}};
+  const o=[['Я схожу и успокою его.',go]];
+  if(!P.flags.efimWhisper)o.push(['А что именно шепчет лес?',()=>{P.flags.efimWhisper=1;gainXp(10);
+    return{t:'Ишь, какой чуткий… Я сам раз ходил, прислушался. Шепчет: „грибы… грибы…“. Думаю, пень из грибов силы тянет. Будешь с ним толковать — срывай грибы вокруг него, не давай подкрепиться.',o:[['Возьмусь!',go],['Подумаю',()=>efimRoot()]]}},{stat:'per',min:6}]);
+  if(!P.flags.efimStumpAdv)o.push(['Дело непростое. Добавишь за смелость?',()=>{P.flags.efimStumpAdv=1;startQuest('stump');
+    return{t:'Ох, торгуешься, как Борис… Ладно. Вернёшься — получишь сверху ещё 30 монет. Слово старосты.',o:[bye]}},{stat:'cha',min:6}]);
+  o.push(['Не сейчас',()=>efimRoot()]);
+  return{t:'Беда у нас тихая, но странная. За восточной опушкой, прямо по дороге, начинается Шепчущий лес. Раньше туда грибники ходили, а теперь лес шепчет — по ночам до самой деревни слышно. Говорят, на дальней поляне проснулся Древний пень. Тропы корнями путает, грибовиков на людей науськивает. Разбудил его кто-то… или что-то.',o};
 }
 function borisRoot(){
   const o=[['Покажи товар',()=>{openShop('boris');return null}],
@@ -1537,7 +1556,7 @@ function renderInv(){
   if(!P.bag.length)bag+='<small style="opacity:.6">Пусто. Ищи сундуки и добычу со слаймов.</small>';
   P.bag.forEach((b,i)=>{const it=ITEMS[b.id];let act='';
     if(['melee','bow','armor','trinket'].includes(it.type))act+='<button data-eq="'+i+'">Надеть</button>';
-    if(it.type==='use')act+='<button data-use="'+i+'">'+(it.heal?'Выпить':'Выпить')+'</button>';
+    if(it.type==='use')act+='<button data-use="'+i+'">'+(it.icon==='mush'?'Съесть':'Выпить')+'</button>';
     act+='<button class="alt" data-drop="'+i+'">Выбросить</button>';
     bag+='<div class="it"><img src="'+ICON[b.id].url+'"><div class="tx"><b>'+getIt(b.id).n+(b.qty>1?' ×'+b.qty:'')+'</b><small>'+itemStats(getIt(b.id))+' · вес '+itemW(b.id,b.qty).toFixed(1).replace('.0','')+'</small></div><div class="ac">'+act+'</div></div>'});
   $('pinv').innerHTML='<div class="inv"><div class="eqs">'+eq+'</div><div class="bag">'+bag+'</div></div>';
