@@ -23,6 +23,9 @@ html,body{margin:0;height:100%;background:#1b1a24;overflow:hidden;touch-action:n
 #bOK{width:84px;height:84px;left:24px;bottom:24px;font-size:40px;border-color:#9dff7a;background:rgba(40,110,40,.6);color:#eaffdf}
 #bZ{width:42px;height:42px;right:162px;top:12px;font-size:18px;border-radius:10px}
 .desk #bZ{right:112px;transform:none}
+#bAuto{width:60px;height:60px;right:22px;bottom:198px;font:bold 13px system-ui,sans-serif;flex-direction:column;line-height:1.05}
+#bAuto b{font-size:20px}
+#bAuto.sel{border-color:#9dff7a;box-shadow:0 0 0 3px rgba(157,255,122,.35);background:rgba(40,110,40,.65)}
 #bA{width:60px;height:60px;right:120px;bottom:22px;font-size:26px}
 #bB{width:60px;height:60px;right:106px;bottom:104px;font-size:26px}
 #bI{width:42px;height:42px;right:112px;top:12px;font-size:20px;border-radius:10px}
@@ -113,6 +116,7 @@ html,body{margin:0;height:100%;background:#1b1a24;overflow:hidden;touch-action:n
   <div class="btn" id="bB" title="Лук (2)">🏹</div>
   <div class="btn" id="bOK" style="display:none">✓</div>
   <div class="btn" id="bZ" title="Масштаб">🔍</div>
+  <div class="btn" id="bAuto" title="Автобой (Q)"><b>⟳</b>авто</div>
   <div class="btn" id="bE" title="Конец хода (пробел)" style="display:none">⏭<small>конец хода</small></div>
   <div class="btn" id="bI" title="Инвентарь (I)">🎒</div>
   <div class="btn" id="bC">👤<span id="badge"></span></div>
@@ -136,8 +140,8 @@ const cv=document.getElementById('c'),cx=cv.getContext('2d');
 const TOUCH=matchMedia('(pointer:coarse)').matches||('ontouchstart' in window);
 if(!TOUCH)document.body.classList.add('desk');
 document.getElementById('help').innerHTML=TOUCH
- ?'<p>Тап по клетке — идти, по слайму — напасть</p><p>В бою: тап — показать действие, второй тап — сделать</p><p>⚔ / 🏹 / ✦ — меч, лук или огонёк, ⏭ — конец хода</p><p>🎒 — инвентарь, 👤 — герой, 🔍 — масштаб</p>'
- :'<p>Клик по клетке — идти, по слайму — напасть; WASD — шаг</p><p>В бою: наведи — шанс и цена в ОД, клик — сделать</p><p>1 / 2 / 3 — меч, лук, огонёк; пробел — конец хода</p><p>I — инвентарь, C — герой</p>';
+ ?'<p>Тап по клетке — идти, по слайму — напасть</p><p>В бою: тап — показать действие, второй тап — сделать</p><p>⚔ / 🏹 / ✦ — меч, лук или огонёк, ⏭ — конец хода</p><p>🎒 — инвентарь, 👤 — герой, 🔍 — масштаб, ⟳ авто — автобой</p>'
+ :'<p>Клик по клетке — идти, по слайму — напасть; WASD — шаг</p><p>В бою: наведи — шанс и цена в ОД, клик — сделать</p><p>1 / 2 / 3 — меч, лук, огонёк; пробел — конец хода</p><p>I — инвентарь, C — герой, Q — автобой</p>';
 // The canvas is full device resolution; the pixel-art world is drawn scaled by S.
 // Positions are snapped to 1/S of an art pixel, so movement is smooth, not 1-art-pixel jumps.
 let VW=320,VH=180,S=1,H=1,UW=320,UH=180;
@@ -462,6 +466,7 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyI'&&paused){togglePanel(false);return}
   if(e.code==='Escape'){if(paused)togglePanel(false);else preview=null;return}
   if(!running||paused)return;
+  if(e.code==='KeyQ'){toggleAuto();return}
   if(e.code==='Digit1'||e.code==='KeyJ')setMode('melee');
   if(e.code==='Digit2'||e.code==='KeyB')setMode('bow');
   if(e.code==='Digit3'||e.code==='KeyE'||e.code==='KeyL')setMode('spell');
@@ -501,13 +506,14 @@ bindBtn(document.getElementById('bI'),()=>openPanel('inv'));
 bindBtn(document.getElementById('bE'),()=>tryEndTurn());
 bindBtn(document.getElementById('bOK'),()=>{if(preview&&preview.ok&&combat&&combat.active===P&&!busy)execute(preview)});
 bindBtn(document.getElementById('bZ'),()=>cycleZoom());
+bindBtn(document.getElementById('bAuto'),()=>toggleAuto());
 bindBtn(document.getElementById('bC'),()=>openPanel('hero'));
 bindBtn(document.getElementById('bF'),()=>{try{const d=document.documentElement;const p=document.fullscreenElement?document.exitFullscreen():(d.requestFullscreen||d.webkitRequestFullscreen).call(d);
   if(p&&p.then)p.then(()=>{try{screen.orientation.lock('landscape').catch(()=>{})}catch(_){}}).catch(()=>{})}catch(_){}});
-function setMode(m){mode=m;document.getElementById('bA').classList.toggle('sel',m==='melee');document.getElementById('bB').classList.toggle('sel',m==='bow');document.getElementById('bM').classList.toggle('sel',m==='spell');
+function setMode(m){document.getElementById('bAuto').classList.toggle('sel',auto);mode=m;document.getElementById('bA').classList.toggle('sel',m==='melee');document.getElementById('bB').classList.toggle('sel',m==='bow');document.getElementById('bM').classList.toggle('sel',m==='spell');
   if(preview&&preview.cell)preview=makePreview(preview.cell[0],preview.cell[1]);snd(500,600,.05,'square',.03)}
 function updButtons(){document.getElementById('bE').style.display=combat?'flex':'none';
-  document.getElementById('bOK').style.display=(TOUCH&&combat&&combat.active===P&&!busy&&preview&&preview.ok)?'flex':'none';
+  document.getElementById('bOK').style.display=(TOUCH&&!auto&&combat&&combat.active===P&&!busy&&preview&&preview.ok)?'flex':'none';
   document.getElementById('bE').classList.toggle('dim',!(combat&&combat.active===P&&!busy))}
 
 function tapCell(x,y,direct){
@@ -577,6 +583,10 @@ async function execute(pv){
       if(distE(P,pv.target)<=1&&pv.target.hp>0){P.ap-=D.meleeAp();await heroMelee(pv.target)}
     }else if(pv.kind==='spell'){P.ap-=D.spellAp();P.mp-=D.spellCost();await heroCast(pv.target)}
     else if(pv.kind==='bow'){P.ap-=D.bowAp();takeItem('arrows',1);await heroShoot(pv.target)}
+    else if(pv.kind==='use'){const it=ITEMS[pv.id];P.ap-=it.ap;takeItem(pv.id,1);
+      if(it.heal){const h=Math.round(D.maxHp()*it.heal);P.hp=Math.min(D.maxHp(),P.hp+h);ftext(P.x,P.y-20,'+'+h+' ♥','#ff8a8a',6,1)}
+      if(it.mana){const m=Math.round(D.maxMp()*it.mana);P.mp=Math.min(D.maxMp(),P.mp+m);ftext(P.x,P.y-20,'+'+m+' маны','#8fc4ff',5,1)}
+      snd(660,990,.2,'triangle',.06);burst(P.x,P.y-8,it.heal?'#ff8a8a':'#8fc4ff',8,40);await wait(.35)}
   }finally{busy=false}
   if(checkEnd())return;
   if(P.ap<=0)endHeroTurn();
@@ -681,13 +691,50 @@ const seqOf=u=>u===P?D.seq():u.seq;
 function heroTurn(){
   P.ap=D.maxAp();P.acBonus=0;P.mp=Math.min(D.maxMp(),P.mp+D.mpRegen()*2);
   if(hoverCell)preview=makePreview(hoverCell[0],hoverCell[1]);
-  return new Promise(r=>{combat.endTurn=r});
+  const pr=new Promise(r=>{combat.endTurn=r});if(auto)autoTurn();return pr;
 }
 function endHeroTurn(){
   if(!combat||combat.active!==P)return;
   P.acBonus=Math.max(0,P.ap)*3;
   if(P.ap>0)ftext(P.x,P.y-22,'+'+P.acBonus+' к броне','#c8ffb8',5,1);
   preview=null;const r=combat.endTurn;combat.endTurn=null;combat.active=null;updButtons();r&&r();
+}
+// ---------- auto-battle: the hero plays their own turns ----------
+let auto=false,autoRunning=false;try{auto=localStorage.getItem('teplyruchey_auto')==='1'}catch(_){}
+function toggleAuto(){auto=!auto;try{localStorage.setItem('teplyruchey_auto',auto?'1':'0')}catch(_){}
+  document.getElementById('bAuto').classList.toggle('sel',auto);banner={s:auto?'Автобой включён':'Автобой выключен',t:1.2};snd(auto?600:400,auto?900:300,.1,'square',.04);
+  if(auto&&combat&&combat.active===P)autoTurn()}
+function autoPick(){
+  const foes=combat.list.filter(e=>e.hp>0);if(!foes.length)return null;
+  if(P.hp<D.maxHp()*.35&&bagCount('pot_hp')&&P.ap>=2)return{kind:'use',id:'pot_hp',ok:true,cost:2,cell:[P.gx,P.gy]};
+  const keep=mode,tryM=(m,e)=>{mode=m;const pv=makePreview(e.gx,e.gy);mode=keep;return pv};
+  const near=foes.slice().sort((a,b)=>distE(P,a)-distE(P,b)||a.hp-b.hp);
+  const adj=near.filter(e=>distE(P,e)<=1).sort((a,b)=>a.hp-b.hp);
+  if(adj.length){const pv=tryM('melee',adj[0]);if(pv&&pv.ok)return pv}
+  if(!adj.length)for(const e of near){
+    const b=tryM('bow',e);if(b&&b.ok&&b.chance>=25)return b;
+    const sp=tryM('spell',e);if(sp&&sp.ok&&sp.chance>=25)return sp;
+  }
+  for(const e of near){const pv=tryM('melee',e);if(pv&&pv.ok)return pv}
+  if(adj.length){for(const m of['bow','spell']){const pv=tryM(m,adj[0]);if(pv&&pv.ok)return pv}return null}
+  const t=near[0],path=findPath(P.gx,P.gy,(a,b)=>cheb(a,b,t.gx,t.gy)<=1&&!unitAt(a,b,P),(a,b)=>!!unitAt(a,b,P));
+  if(path&&path.length){const st=path.slice(0,P.ap);return{kind:'move',path:st,cost:st.length,ok:true,cell:st[st.length-1]}}
+  return null;
+}
+async function autoTurn(){
+  if(autoRunning)return;autoRunning=true;
+  try{
+    while(auto&&combat&&combat.active===P&&P.ap>0&&P.dead<=0){
+      await wait(.35);
+      if(!auto||!combat||combat.active!==P)break;
+      if(busy){await until(()=>!busy);continue}
+      const pv=autoPick();
+      if(!pv){endHeroTurn();break}
+      preview=pv.kind==='use'?null:pv;await wait(.25);
+      if(!auto||!combat||combat.active!==P)break;
+      await execute(pv);
+    }
+  }finally{autoRunning=false}
 }
 function tryEndTurn(){if(combat&&combat.active===P&&!busy){snd(400,300,.08,'square',.04);endHeroTurn()}}
 async function enemyTurn(e){
@@ -1122,12 +1169,13 @@ function render(){
     const a=combat.active;
     otext(a===P?'Твой ход':a?(a.blue?'Ходит синий слайм':'Ходит зелёный слайм'):'',UW/2,25,5.5,a===P?'#9dff7a':'#ffd27a');
     if(a===P)otext('ОД '+P.ap+' / '+D.maxAp(),UW/2,UH-20,4.6,'#c8ffb8');
+    if(auto)otext('АВТОБОЙ',UW/2,33,4.4,'#9dff7a');
   }
   if(preview&&combat&&combat.active===P){
     const c=cellPx(preview.cell[0],preview.cell[1]);
     const label=preview.msg?preview.msg:(preview.kind==='move'?preview.cost+' ОД':preview.chance+'% · '+preview.cost+' ОД');
     const k=S/H;otext(label,c.x-CX,c.y-CY-18,5.5/k*1.1,preview.ok?'#ffffff':'#ff9a9a',null,S);
-    if(TOUCH&&preview.ok)otext('✓ или тап ещё раз',c.x-CX,c.y-CY-18+6.5/k*1.1,3.8/k*1.1,'#ffe9b0',null,S);
+    if(TOUCH&&!auto&&preview.ok)otext('✓ или тап ещё раз',c.x-CX,c.y-CY-18+6.5/k*1.1,3.8/k*1.1,'#ffe9b0',null,S);
   }
   for(const t of texts){cx.globalAlpha=Math.min(1,t.life/t.max*2);otext(t.s,wx(t.x),wy(t.y),t.size*H/S*1.1,t.col,null,S)}
   cx.globalAlpha=1;
