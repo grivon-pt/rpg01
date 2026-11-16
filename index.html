@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Тёплый Ручей — прототип</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#1b1a24">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Тёплый Ручей">
 <style>
 html,body{margin:0;height:100%;background:#1b1a24;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
 #c{position:fixed;inset:0;width:100vw;height:100vh;display:block}
@@ -13,6 +20,9 @@ html,body{margin:0;height:100%;background:#1b1a24;overflow:hidden;touch-action:n
 #bE{width:84px;height:84px;right:22px;bottom:22px;font-size:30px;flex-direction:column;line-height:1}
 #bE small{font-size:10px;font-weight:600;margin-top:2px}
 #bE.dim{opacity:.35}
+#bOK{width:84px;height:84px;left:24px;bottom:24px;font-size:40px;border-color:#9dff7a;background:rgba(40,110,40,.6);color:#eaffdf}
+#bZ{width:42px;height:42px;right:162px;top:12px;font-size:18px;border-radius:10px}
+.desk #bZ{right:112px;transform:none}
 #bA{width:60px;height:60px;right:120px;bottom:22px;font-size:26px}
 #bB{width:60px;height:60px;right:106px;bottom:104px;font-size:26px}
 #bI{width:42px;height:42px;right:112px;top:12px;font-size:20px;border-radius:10px}
@@ -101,6 +111,8 @@ html,body{margin:0;height:100%;background:#1b1a24;overflow:hidden;touch-action:n
   <div class="btn" id="bM" title="Огонёк (3)">✦</div>
   <div class="btn" id="bA" title="Ближний бой (1)">⚔</div>
   <div class="btn" id="bB" title="Лук (2)">🏹</div>
+  <div class="btn" id="bOK" style="display:none">✓</div>
+  <div class="btn" id="bZ" title="Масштаб">🔍</div>
   <div class="btn" id="bE" title="Конец хода (пробел)" style="display:none">⏭<small>конец хода</small></div>
   <div class="btn" id="bI" title="Инвентарь (I)">🎒</div>
   <div class="btn" id="bC">👤<span id="badge"></span></div>
@@ -124,17 +136,23 @@ const cv=document.getElementById('c'),cx=cv.getContext('2d');
 const TOUCH=matchMedia('(pointer:coarse)').matches||('ontouchstart' in window);
 if(!TOUCH)document.body.classList.add('desk');
 document.getElementById('help').innerHTML=TOUCH
- ?'<p>Тап по клетке — идти, по слайму — напасть</p><p>В бою: тап — показать действие, второй тап — сделать</p><p>⚔ / 🏹 / ✦ — меч, лук или огонёк, ⏭ — конец хода</p><p>🎒 — инвентарь, 👤 — герой</p>'
+ ?'<p>Тап по клетке — идти, по слайму — напасть</p><p>В бою: тап — показать действие, второй тап — сделать</p><p>⚔ / 🏹 / ✦ — меч, лук или огонёк, ⏭ — конец хода</p><p>🎒 — инвентарь, 👤 — герой, 🔍 — масштаб</p>'
  :'<p>Клик по клетке — идти, по слайму — напасть; WASD — шаг</p><p>В бою: наведи — шанс и цена в ОД, клик — сделать</p><p>1 / 2 / 3 — меч, лук, огонёк; пробел — конец хода</p><p>I — инвентарь, C — герой</p>';
 // The canvas is full device resolution; the pixel-art world is drawn scaled by S.
 // Positions are snapped to 1/S of an art pixel, so movement is smooth, not 1-art-pixel jumps.
-let VW=320,VH=180,S=1;
+let VW=320,VH=180,S=1,H=1,UW=320,UH=180;
+// world zoom: how many art pixels fit the short side of the screen (smaller = bigger cells)
+const ZOOMS=[180,150,125,105];
+let zoomIdx=TOUCH?2:0;try{const z=+localStorage.getItem('teplyruchey_zoom');if(z>=0&&z<ZOOMS.length&&localStorage.getItem('teplyruchey_zoom')!==null)zoomIdx=z}catch(_){}
 function resize(){
   const dpr=devicePixelRatio||1;
   cv.width=Math.round(innerWidth*dpr);cv.height=Math.round(innerHeight*dpr);
-  S=Math.max(1,Math.round(Math.min(cv.width,cv.height)/180));
-  VW=cv.width/S;VH=cv.height/S;
+  const short=Math.min(cv.width,cv.height);
+  S=Math.max(1,Math.round(short/ZOOMS[zoomIdx]));VW=cv.width/S;VH=cv.height/S;
+  H=Math.max(1,Math.round(short/180));UW=cv.width/H;UH=cv.height/H;
 }
+function cycleZoom(){zoomIdx=(zoomIdx+1)%ZOOMS.length;try{localStorage.setItem('teplyruchey_zoom',zoomIdx)}catch(_){}resize();
+  if(typeof banner!=='undefined')banner={s:'Масштаб: '+['мелко','средне','крупно','очень крупно'][zoomIdx],t:1.2}}
 addEventListener('resize',resize);resize();
 addEventListener('contextmenu',e=>e.preventDefault());
 const q=v=>Math.round(v*S)/S;
@@ -460,9 +478,18 @@ function keyStep(dx,dy){
   if(combat){if(combat.active===P&&!busy){const pv=makePreview(nx,ny);if(pv&&pv.ok)execute(pv)}}
   else if(!P.mv)setPath(P,[[nx,ny]],1/D.walk());
 }
-function clientToCell(cxp,cyp){const k=cv.width/innerWidth;return[Math.floor((cxp*k/S+CX)/T),Math.floor((cyp*k/S+CY)/T)]}
-cv.addEventListener('pointerdown',e=>{e.preventDefault();if(!running||paused)return;const[x,y]=clientToCell(e.clientX,e.clientY);tapCell(x,y,e.pointerType==='mouse')});
-cv.addEventListener('pointermove',e=>{if(e.pointerType!=='mouse'||!running||paused)return;const[x,y]=clientToCell(e.clientX,e.clientY);
+function clientToWorld(cxp,cyp){const k=cv.width/innerWidth;return[cxp*k/S+CX,cyp*k/S+CY]}
+function clientToCell(cxp,cyp){const[x,y]=clientToWorld(cxp,cyp);return[Math.floor(x/T),Math.floor(y/T)]}
+// a finger is wide: snap to a slime or chest whose sprite is near the touch point
+function pickCell(cxp,cyp,touch){
+  const[x,y]=clientToWorld(cxp,cyp);let best=null,bd=touch?13:8;
+  for(const e of enemies)if(e.hp>0){const d=Math.hypot(e.x-x,e.y-6-y);if(d<bd){bd=d;best=[e.gx,e.gy]}}
+  for(const c of chests){const d=Math.hypot(c.x*T+8-x,c.y*T+7-y);if(d<bd){bd=d;best=[c.x,c.y]}}
+  if(!best&&touch&&preview&&preview.cell){const c=cellPx(preview.cell[0],preview.cell[1]);if(Math.hypot(c.x-x,c.y-6-y)<12)best=preview.cell.slice()}
+  return best||[Math.floor(x/T),Math.floor(y/T)];
+}
+cv.addEventListener('pointerdown',e=>{e.preventDefault();if(!running||paused)return;const m=e.pointerType==='mouse';const[x,y]=pickCell(e.clientX,e.clientY,!m);tapCell(x,y,m)});
+cv.addEventListener('pointermove',e=>{if(e.pointerType!=='mouse'||!running||paused)return;const[x,y]=pickCell(e.clientX,e.clientY,false);
   if(!hoverCell||hoverCell[0]!==x||hoverCell[1]!==y){hoverCell=[x,y];if(combat&&combat.active===P&&!busy)preview=makePreview(x,y)}});
 cv.addEventListener('pointerleave',()=>{hoverCell=null});
 function bindBtn(el,down){el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();el.classList.add('on');down()});
@@ -472,12 +499,15 @@ bindBtn(document.getElementById('bM'),()=>setMode('spell'));
 bindBtn(document.getElementById('bB'),()=>setMode('bow'));
 bindBtn(document.getElementById('bI'),()=>openPanel('inv'));
 bindBtn(document.getElementById('bE'),()=>tryEndTurn());
+bindBtn(document.getElementById('bOK'),()=>{if(preview&&preview.ok&&combat&&combat.active===P&&!busy)execute(preview)});
+bindBtn(document.getElementById('bZ'),()=>cycleZoom());
 bindBtn(document.getElementById('bC'),()=>openPanel('hero'));
 bindBtn(document.getElementById('bF'),()=>{try{const d=document.documentElement;const p=document.fullscreenElement?document.exitFullscreen():(d.requestFullscreen||d.webkitRequestFullscreen).call(d);
   if(p&&p.then)p.then(()=>{try{screen.orientation.lock('landscape').catch(()=>{})}catch(_){}}).catch(()=>{})}catch(_){}});
 function setMode(m){mode=m;document.getElementById('bA').classList.toggle('sel',m==='melee');document.getElementById('bB').classList.toggle('sel',m==='bow');document.getElementById('bM').classList.toggle('sel',m==='spell');
   if(preview&&preview.cell)preview=makePreview(preview.cell[0],preview.cell[1]);snd(500,600,.05,'square',.03)}
 function updButtons(){document.getElementById('bE').style.display=combat?'flex':'none';
+  document.getElementById('bOK').style.display=(TOUCH&&combat&&combat.active===P&&!busy&&preview&&preview.ok)?'flex':'none';
   document.getElementById('bE').classList.toggle('dim',!(combat&&combat.active===P&&!busy))}
 
 function tapCell(x,y,direct){
@@ -499,7 +529,8 @@ function tapCell(x,y,direct){
   if(combat.active!==P)return;
   const pv=makePreview(x,y);
   if(!pv){preview=null;return}
-  if(direct||(preview&&preview.cell[0]===x&&preview.cell[1]===y)){if(pv.ok)execute(pv);else{preview=pv;snd(180,140,.08,'square',.03)}}
+  const same=preview&&((preview.cell[0]===x&&preview.cell[1]===y)||(preview.target&&pv.target===preview.target));
+  if(direct||same){if(pv.ok)execute(pv);else{preview=pv;snd(180,140,.08,'square',.03)}}
   else preview=pv;
 }
 let tapMark=null;
@@ -1009,7 +1040,7 @@ const HS=['.xx.xx.','xxxxxxx','xxxxxxx','.xxxxx.','..xxx..','...x...'];
 function heart(x,y){for(let j=0;j<6;j++)for(let i=0;i<7;i++)if(HS[j][i]==='x'){cx.fillStyle=(j===1&&i===1)?'#ffc0c0':'#e8434b';cx.fillRect(x+i,y+j,1,1)}}
 function bar(x,y,w,h,v,max,col,bg){cx.fillStyle='#160f1c';cx.fillRect(x-1,y-1,w+2,h+2);cx.fillStyle=bg;cx.fillRect(x,y,w,h);
   const fw=Math.round(w*Math.max(0,Math.min(1,v/max))*S)/S;cx.fillStyle=col;cx.fillRect(x,y,fw,h);cx.fillStyle='rgba(255,255,255,.25)';cx.fillRect(x,y,fw,1)}
-function otext(s,x,y,size,col,align){cx.font='bold '+Math.round(size*S)+'px system-ui,sans-serif';cx.textAlign=align||'center';cx.textBaseline='middle';
+function otext(s,x,y,size,col,align,sc){const S=sc||H;cx.font='bold '+Math.round(size*S)+'px system-ui,sans-serif';cx.textAlign=align||'center';cx.textBaseline='middle';
   cx.lineJoin='round';cx.lineWidth=Math.max(2,size*S*.28);cx.strokeStyle='#2a1a12';cx.strokeText(s,x*S,y*S);cx.fillStyle=col;cx.fillText(s,x*S,y*S)}
 function cellBox(gx,gy,col,fill){const x=gx*T-CX,y=gy*T-CY;if(fill){cx.fillStyle=fill;cx.fillRect(x,y,T,T)}if(col){cx.strokeStyle=col;cx.lineWidth=1/S*2;cx.strokeRect(x+.5,y+.5,T-1,T-1)}}
 
@@ -1034,7 +1065,7 @@ function drawPreview(){
 }
 function drawOrder(){
   if(!combat||!combat.order.length)return;
-  const list=combat.order.filter(u=>u===P||u.hp>0),w=14,x0=VW/2-list.length*w/2;
+  const list=combat.order.filter(u=>u===P||u.hp>0),w=14,x0=UW/2-list.length*w/2;
   cx.fillStyle='rgba(30,22,40,.7)';cx.fillRect(x0-3,3,list.length*w+4,16);
   list.forEach((u,i)=>{const x=x0+i*w,y=5;
     cx.fillStyle=u===combat.active?'#ffd27a':'#43344a';cx.fillRect(x,y,12,12);cx.fillStyle='#2b2033';cx.fillRect(x+1,y+1,10,10);
@@ -1043,7 +1074,7 @@ function drawOrder(){
   });
 }
 function drawAP(){
-  if(!combat)return;const max=D.maxAp(),w=8,x0=VW/2-max*w/2,y=VH-13;
+  if(!combat)return;const max=D.maxAp(),w=8,x0=UW/2-max*w/2,y=UH-13;
   cx.fillStyle='rgba(30,22,40,.7)';cx.fillRect(x0-4,y-4,max*w+6,12);
   const spend=preview&&combat.active===P?Math.min(P.ap,preview.cost||0):0;
   for(let i=0;i<max;i++){const lit=combat.active===P&&i<P.ap,willUse=lit&&i>=P.ap-spend&&preview&&preview.ok;
@@ -1069,7 +1100,8 @@ function render(){
   for(const b of bolts)drawBolt(b);
   for(const p of parts){cx.globalAlpha=Math.min(1,p.life/p.max*1.5);cx.fillStyle=p.col;cx.fillRect(wx(p.x),wy(p.y),p.sz,p.sz)}
   cx.globalAlpha=1;
-  // HUD
+  // HUD (UI scale)
+  cx.setTransform(H,0,0,H,0,0);
   cx.fillStyle='rgba(30,22,40,.6)';cx.fillRect(2,2,82,34);
   {const ic=mode==='bow'?(P.eq.bow||'bow_short'):mode==='spell'?null:(P.eq.melee||'sword_wood');if(ic)cx.drawImage(ICON[ic].cv,40,27,7,7);else{cx.fillStyle='#ffb03a';cx.fillRect(42,29,3,3)}}
   bar(6,6,74,6,P.hp,D.maxHp(),'#e8434b','#4a2230');
@@ -1077,7 +1109,7 @@ function render(){
   bar(6,22,74,2,P.xp,xpNeed(),'#9fe07a','#24331f');
   cx.fillStyle='#c9952a';cx.fillRect(6,27,4,5);cx.fillStyle='#f5c542';cx.fillRect(6,27,4,4);cx.fillStyle='#fff3b0';cx.fillRect(6,27,1,1);
   drawOrder();drawAP();
-  if(P.dead>0){cx.fillStyle='rgba(20,15,30,'+Math.min(.6,(2.2-P.dead)*.6)+')';cx.fillRect(0,0,VW,VH)}
+  if(P.dead>0){cx.fillStyle='rgba(20,15,30,'+Math.min(.6,(2.2-P.dead)*.6)+')';cx.fillRect(0,0,UW,UH)}
   // text layer (full resolution)
   cx.setTransform(1,0,0,1,0,0);
   otext(Math.ceil(P.hp)+' / '+D.maxHp(),43,9.2,5,'#fff');
@@ -1088,22 +1120,22 @@ function render(){
   if((P.pts>0||P.perkPicks>0)&&Math.floor(time*2)%2===0)otext('★ '+(P.perkPicks>0?'новый перк':'очко S.P.E.C.I.A.L.')+(TOUCH?' — нажми 👤':' — нажми C'),4,42,4.6,'#ffd27a','left');
   if(combat){
     const a=combat.active;
-    otext(a===P?'Твой ход':a?(a.blue?'Ходит синий слайм':'Ходит зелёный слайм'):'',VW/2,25,5.5,a===P?'#9dff7a':'#ffd27a');
-    if(a===P)otext('ОД '+P.ap+' / '+D.maxAp(),VW/2,VH-20,4.6,'#c8ffb8');
+    otext(a===P?'Твой ход':a?(a.blue?'Ходит синий слайм':'Ходит зелёный слайм'):'',UW/2,25,5.5,a===P?'#9dff7a':'#ffd27a');
+    if(a===P)otext('ОД '+P.ap+' / '+D.maxAp(),UW/2,UH-20,4.6,'#c8ffb8');
   }
   if(preview&&combat&&combat.active===P){
     const c=cellPx(preview.cell[0],preview.cell[1]);
     const label=preview.msg?preview.msg:(preview.kind==='move'?preview.cost+' ОД':preview.chance+'% · '+preview.cost+' ОД');
-    otext(label,c.x-CX,c.y-CY-18,5.5,preview.ok?'#ffffff':'#ff9a9a');
-    if(TOUCH&&preview.ok)otext('ещё раз — подтвердить',c.x-CX,c.y-CY-11.5,3.6,'#ffe9b0');
+    const k=S/H;otext(label,c.x-CX,c.y-CY-18,5.5/k*1.1,preview.ok?'#ffffff':'#ff9a9a',null,S);
+    if(TOUCH&&preview.ok)otext('✓ или тап ещё раз',c.x-CX,c.y-CY-18+6.5/k*1.1,3.8/k*1.1,'#ffe9b0',null,S);
   }
-  for(const t of texts){cx.globalAlpha=Math.min(1,t.life/t.max*2);otext(t.s,wx(t.x),wy(t.y),t.size,t.col)}
+  for(const t of texts){cx.globalAlpha=Math.min(1,t.life/t.max*2);otext(t.s,wx(t.x),wy(t.y),t.size*H/S*1.1,t.col,null,S)}
   cx.globalAlpha=1;
-  if(hintT>0&&running&&!combat){cx.globalAlpha=Math.min(1,hintT);otext(TOUCH?'Тапни по клетке — герой пойдёт туда. Тапни по слайму — бой.':'Клик по клетке — идти, по слайму — бой. WASD — шаг.',VW/2,VH-14,5.5,'#fff0d0');cx.globalAlpha=1}
+  if(hintT>0&&running&&!combat){cx.globalAlpha=Math.min(1,hintT);otext(TOUCH?'Тапни по клетке — герой пойдёт туда. Тапни по слайму — бой.':'Клик по клетке — идти, по слайму — бой. WASD — шаг.',UW/2,UH-14,5.5,'#fff0d0');cx.globalAlpha=1}
   if(combatTip>0&&combat){cx.globalAlpha=Math.min(1,combatTip);
-    otext(TOUCH?'Тап — показать действие, второй тап — сделать. Кнопки справа — меч, лук, огонёк и конец хода.':'Наведи — шанс и цена в ОД, клик — сделать. 1/2/3 — меч/лук/огонёк, пробел — конец хода.',VW/2,VH-30,4.6,'#fff0d0');cx.globalAlpha=1}
-  if(banner){cx.globalAlpha=Math.min(1,banner.t*2);otext(banner.s,VW/2,VH*.34,10,'#ffd27a');cx.globalAlpha=1}
-  if(P.dead>0)otext('Герой устал…',VW/2,VH/2,11,'#ffe0c0');
+    otext(TOUCH?'Тап — показать действие, второй тап — сделать. Кнопки справа — меч, лук, огонёк и конец хода.':'Наведи — шанс и цена в ОД, клик — сделать. 1/2/3 — меч/лук/огонёк, пробел — конец хода.',UW/2,UH-30,4.6,'#fff0d0');cx.globalAlpha=1}
+  if(banner){cx.globalAlpha=Math.min(1,banner.t*2);otext(banner.s,UW/2,UH*.34,10,'#ffd27a');cx.globalAlpha=1}
+  if(P.dead>0)otext('Герой устал…',UW/2,UH/2,11,'#ffe0c0');
 }
 
 // ---------- loop ----------
@@ -1111,6 +1143,7 @@ let last=0;
 function loop(t){const dt=Math.min(.05,(t-last)/1000||0);last=t;if(running&&!paused)update(dt);render();requestAnimationFrame(loop)}
 camX=Math.max(0,Math.min(MW*T-VW,P.x-VW/2));camY=Math.max(0,Math.min(MH*T-VH,P.y-8-VH/2));
 requestAnimationFrame(loop);
+if('serviceWorker' in navigator&&location.protocol==='https:'&&!/claude/.test(location.hostname)){try{navigator.serviceWorker.register('sw.js').catch(()=>{})}catch(_){}}
 </script>
 </body>
 </html>

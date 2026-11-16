@@ -1,0 +1,17 @@
+{
+  "name": "Тёплый Ручей",
+  "short_name": "Тёплый Ручей",
+  "description": "Уютная пиксельная RPG с пошаговыми боями в духе Fallout",
+  "lang": "ru",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#1b1a24",
+  "theme_color": "#1b1a24",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
